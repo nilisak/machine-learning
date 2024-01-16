@@ -3,7 +3,6 @@ from argparse import Namespace
 
 
 def test_imports():
-
     import torch  # noqa: F401
     import torchvision  # noqa: F401
     import pytorch_lightning as pl  # noqa: F401
@@ -54,6 +53,7 @@ def test_sequencer():
     assert "invalid choice" in output.stderr.decode()
 
     print("All sequences have passed the test!")
+
 
 if __name__ == "__main__":
     test_imports()
