@@ -1,26 +1,11 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.colors import LogNorm
 
-"""
+
 def fit_poly(x_train, y_train, degree):
     X = np.vander(x_train, degree + 1, increasing=True)
     beta = np.linalg.inv(np.transpose(X) @ X) @ np.transpose(X) @ y_train
-    return beta.reshape(1, -1)
-
-
-"""
-
-
-def fit_poly(x_train, y_train, degree):
-    X = np.vander(x_train, degree + 1, increasing=True)
-
-    # Using SVD to compute the pseudo-inverse
-    U, S, Vt = np.linalg.svd(X, full_matrices=False)
-    S_inv = np.diag(1.0 / S)
-    pseudo_inv = Vt.T @ S_inv @ U.T
-
-    beta = pseudo_inv @ y_train
-
     return beta.reshape(1, -1)
 
 
@@ -41,12 +26,12 @@ y = np.sin(x)
 
 # training points
 num_points_train = 15
-x_train = np.linspace(0, 2 * np.pi, num_points_train)
+x_train = np.random.uniform(0, 2 * np.pi, num_points_train)
 y_train = np.sin(x_train) + np.random.normal(0, 0.1, num_points_train)
 
 # Test points
 num_points_test = 10
-x_test = np.linspace(0, 2 * np.pi, num_points_test)
+x_test = np.random.uniform(0, 2 * np.pi, num_points_test)
 y_test = np.sin(x_test) + np.random.normal(0, 0.1, num_points_test)
 
 # fit third order
@@ -84,12 +69,12 @@ y = np.sin(x)
 
 # training points
 num_points_train = 15
-x_train = np.linspace(0, 4 * np.pi, num_points_train)
+x_train = np.random.uniform(0, 4 * np.pi, num_points_train)
 y_train = np.sin(x_train) + np.random.normal(0, 0.1, num_points_train)
 
 # Test points
 num_points_test = 10
-x_test = np.linspace(0, 4 * np.pi, num_points_test)
+x_test = np.random.uniform(0, 4 * np.pi, num_points_test)
 y_test = np.sin(x_test) + np.random.normal(0, 0.1, num_points_test)
 
 pol_degree = 15
@@ -101,7 +86,7 @@ for k in range(1, pol_degree + 1):
     degree[k - 1] = k
 
 # fit eight order
-betas = fit_poly(x_train, y_train, 8)
+betas = fit_poly(x_train, y_train, 7)
 # get eight order y
 y_pol = poly(x, betas)
 
@@ -111,7 +96,7 @@ plt.show()
 
 plt.scatter(x_train, y_train, color="red", label="Training data")
 plt.scatter(x_test, y_test, color="green", label="Testing data")
-plt.plot(x, y_pol, label="eight Order Polynomial")
+plt.plot(x, y_pol, label="seventh Order Polynomial")
 plt.legend()
 plt.show()
 
@@ -120,12 +105,12 @@ plt.show()
 
 # training points
 num_points_train = 1500
-x_train = np.linspace(0, 4 * np.pi, num_points_train)
+x_train = np.random.uniform(0, 4 * np.pi, num_points_train)
 y_train = np.sin(x_train) + np.random.normal(0, 0.1, num_points_train)
 
 # Test points
 num_points_test = 1000
-x_test = np.linspace(0, 4 * np.pi, num_points_test)
+x_test = np.random.uniform(0, 4 * np.pi, num_points_test)
 y_test = np.sin(x_test) + np.random.normal(0, 0.1, num_points_test)
 
 
@@ -145,31 +130,35 @@ def ridge_fit_poly(x_train, y_train, k, lamb):
 parameters = np.zeros((20, 20))
 lambda_values = 10 ** np.linspace(-5, 0, 20)
 
+
 for k in range(1, 21):
     for lamb_counter, lamb in enumerate(lambda_values):
         w = ridge_fit_poly(x_train, y_train, k, lamb)
         parameters[k - 1, lamb_counter] = mse_poly(x_test, y_test, w)
 
 # Plot the results
-plt.imshow(
-    parameters,
-    cmap="viridis",
-    extent=(lambda_values.min(), lambda_values.max(), 1, 20),
-    aspect="auto",
-)
-plt.colorbar(label="MSE")
-plt.xlabel("Lambda")
-plt.ylabel("Polynomial Degree (k)")
-plt.xscale("log")
-plt.title("MSE vs Polynomial Degree and Lambda")
-plt.show()
+
 min_value = np.min(parameters)
 min_indices = np.unravel_index(np.argmin(parameters), parameters.shape)
 
 print("Minimum Value:", min_value)
 print("Indices of Minimum Value:", min_indices)
-print(f"degree for minimum is {min_indices[0]}")
+print(f"degree for minimum is {min_indices[0]+1}")
 print(f"lambda for minimum is {lambda_values[min_indices[1]]}")
+
+plt.imshow(
+    parameters,
+    cmap="viridis",
+    aspect="auto",
+    norm=LogNorm(),
+)
+plt.colorbar(label="MSE (log scale)")
+plt.xticks(range(len(lambda_values)), [f"{val:.2e}" for val in lambda_values], rotation="vertical")
+plt.yticks(range(20), [f"{val}" for val in range(1, 21)])
+plt.xlabel("Lambda")
+plt.ylabel("Polynomial Degree (k)")
+plt.title("MSE vs Polynomial Degree and Lambda")
+plt.show()
 
 
 # ----------------------------cross validation ----------------------
@@ -217,8 +206,8 @@ def get_all_divisors(number):
     return np.array(divisors)
 
 
-k = 9
-lambda_ = lambda_values[1]
+k = 10
+lambda_ = lambda_values[3]
 points = 120
 
 folds = get_all_divisors(120)
@@ -227,8 +216,7 @@ folds = np.sort(folds)
 result = np.zeros(((len(folds)), 100))
 
 for i in range(100):
-    x = np.linspace(0, 4 * np.pi, points)
-    np.random.shuffle(x)
+    x = np.random.uniform(0, 4 * np.pi, points)
     y = np.sin(x) + np.random.normal(0, 0.1, points)
     fold_counter = 0
     for fold in folds:
