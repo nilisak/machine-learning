@@ -143,10 +143,10 @@ for k in range(1, 21):
 min_value = np.min(parameters)
 min_indices = np.unravel_index(np.argmin(parameters), parameters.shape)
 
-print("Minimum Value:", min_value)
-print("Indices of Minimum Value:", min_indices)
-print(f"degree for minimum is {min_indices[0]+1}")
-print(f"lambda for minimum is {lambda_values[min_indices[1]]}")
+# print("Minimum Value:", min_value)
+# print("Indices of Minimum Value:", min_indices)
+# print(f"degree for minimum is {min_indices[0]+1}")
+# print(f"lambda for minimum is {lambda_values[min_indices[1]]}")
 
 plt.imshow(
     parameters,
