@@ -2,6 +2,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
 
+np.random.seed(42)
+
 
 def fit_poly(x_train, y_train, degree):
     X = np.vander(x_train, degree + 1, increasing=True)
@@ -46,7 +48,7 @@ y_pol = poly(x, betas)
 
 # get mse
 
-mse = mse_poly(x_train, y_train, betas)
+mse = mse_poly(x_test, y_test, betas)
 
 
 # Plotting
@@ -85,9 +87,9 @@ for k in range(1, pol_degree + 1):
     mses[k - 1] = mse_poly(x_test, y_test, betas)
     degree[k - 1] = k
 
-# fit eight order
+# fit seventh order
 betas = fit_poly(x_train, y_train, 7)
-# get eight order y
+# get seventh order y
 y_pol = poly(x, betas)
 
 plt.plot(degree, mses)
@@ -207,7 +209,7 @@ def get_all_divisors(number):
 
 
 k = 10
-lambda_ = lambda_values[3]
+lambda_ = lambda_values[4]
 points = 120
 
 folds = get_all_divisors(120)
@@ -239,7 +241,7 @@ plt.errorbar(
     fmt="o",
     label="Mean ± Std Dev",
 )
-plt.xlabel("Fold Index")
-plt.ylabel("Mean Value")
+plt.xlabel("Fold size")
+plt.ylabel("Mean Value and std")
 plt.legend()
 plt.show()
