@@ -26,14 +26,15 @@ Write a function `mse_poly` which returns the mean squared error of a fit polyno
 - A numpy array `y` of shape `(N,)` with the y-values of the test data
 - A numpy array `W` of shape `(1, k)` with the weights of the polynomial
 
-Compute the MSE of the polynomial you have fitted and add it to the lengend of the plot.
+Compute the MSE of the polynomial you have fitted and add it to the legend of the plot.
 
 ### 2.c Overfitting (5 Points)
 
 Now, we want to study overfitting in this context. To this end, expand the domain of the data to $[0,4\pi]$ and generate 15 training- and 10 test data points in this interval.
 
-1. Fit polynomials with $k=1,\dots,15$ and plot their MSEs against k witht a logarithmic MSE-axis. Run your script a few times with different random seeds (if you have not set the seed explicitly, this means that you can just run your script several times) and see how the plot changes. Discuss what you observe.
-2. Select a `k` which you think worked best across different seeds and plot the corresponding ploynomial fit for one representative training data sample
+1. Fit polynomials with $k=1,\dots,15$ and plot their MSEs against k with a logarithmic MSE-axis. Run your script a few times with different random seeds (if you have not set the seed explicitly, this means that you can just run your script several times) and see how the plot changes. Discuss what you observe.
+2. Select a `k` which you think worked best across different seeds and plot the
+   corresponding polynomial fit for one representative training data sample
 
 ### 2.d Ridge regression (15 Points)
 
@@ -48,7 +49,7 @@ in the notation of Lecture 2. Write a function `ridge_fit_poly` which performs r
 - A float `lamb` for the regularization parameter
 and return a numpy array of shape `(1, k+1)` with the weights of the fitted polynomial.
 
-Now perform a two-dimensional hyperparameter optimization using grid search: For each combination of `k` in `list(range(1, 21))` and `lamb` in `10 ** np.linspace(-5, 0, 20)`, perform a ridge regression fit on the training data in $[0,4\pi]$ and compute the MSE on the test data. Then, plot the logarithms of the MSEs in a two-dimensional grid for the different values of `k` and `lamb` using `mathplotlib.pyplot.imshow`.
+Now perform a two-dimensional hyperparameter optimization using grid search: For each combination of `k` in `list(range(1, 21))` and `lamb` in `10 ** np.linspace(-5, 0, 20)`, perform a ridge regression fit on the training data in $[0,4\pi]$ and compute the MSE on the test data. Then, plot the logarithms of the MSEs in a two-dimensional grid for the different values of `k` and `lamb` using `matplotlib.pyplot.imshow`.
 
 Again, try a few different random seeds to get a feeling for the variance in your plot. Increase the amount of test data by a factor of 100 and see how the plot changes. Also increase the training data by a factor of 100 and see what happens. Discuss your results.
 
