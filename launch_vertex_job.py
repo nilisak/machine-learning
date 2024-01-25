@@ -16,7 +16,8 @@ EXP_DESCRIPTION = "Assignments for MS in DNNs lecture"
 WANDB_KEY = json.load(open("wandb_key.json"))
 CREDENTIALS = service_account.Credentials.from_service_account_file("credentials.json")
 CONTAINER = "europe-docker.pkg.dev/vertex-ai/training/pytorch-gpu.1-13.py310:latest"
-N_GPUS = 1
+N_GPUS = 0
+DATETIME_FMT = "%Y-%m-%d_%H%M%S"
 
 aiplatform.init(
     # your Google Cloud Project ID or number
