@@ -25,6 +25,7 @@ def test_np_linear():
     assert (np.max(np.abs(output - target_output))) < 1e-10
 
     x_grad = np_linear.backward(np.ones((2, 20)))
+    print(target_x_grad)
     assert (np.max(np.abs(target_x_grad - x_grad))) < 1e-10
     assert (np.max(np.abs(target_weight_grad - np_linear.W_grad))) < 1e-10
     assert (np.max(np.abs(target_bias_grad - np_linear.b_grad))) < 1e-10

@@ -38,11 +38,7 @@ class PolynomialModel(nn.Module):
 # Initialize weights for the polynomial model
 def initialize_weights(model):
     with torch.no_grad():
-        for i, param in enumerate(model.parameters()):
-            if i == 0:  # Weights initialization
-                param[:] = torch.tensor([1 / (n + 1) for n in range(len(param))])
-            else:  # Bias initialization (if any)
-                param.zero_()
+        model.weights = nn.Parameter(torch.tensor([0.1**n for n in range(len(model.weights))]))
 
 
 # Function to train the model
@@ -75,6 +71,7 @@ for lr, loss_history in loss_histories.items():
 # plt.yscale("log")
 plt.xlabel("Training Steps")
 plt.ylabel("Loss")
+plt.yscale("log")
 plt.title("Loss vs. Training Steps for Different Learning Rates")
 plt.legend()
 plt.show()
