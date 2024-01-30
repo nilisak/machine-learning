@@ -104,7 +104,7 @@ x_test = np.random.uniform(low=-np.pi, high=np.pi, size=N_TEST)[:, None]
 y_test = np.sin(x_test) + np.random.randn(N_TEST, 1) * SIGMA_NOISE
 
 # Initialize the neural network
-model = NPModel([1, 16, 16, 1])
+model = NPModel([1, 8, 8, 1])
 
 # Training hyperparameters
 epochs = 5000
