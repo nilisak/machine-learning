@@ -15,12 +15,15 @@ class NPLinear:
 
     def forward(self, x):
         # Compute the forward pass
+        print(np.shape(x @ self.W.T))
+        print(np.shape(self.b))
         self.x = x
         return x @ self.W.T + self.b
 
     def backward(self, grad_output):
         # Compute gradients
         self.W_grad = grad_output.T @ self.x
+        print(np.shape(self.W_grad))
         self.b_grad = np.sum(grad_output, axis=0)
         return grad_output @ self.W
 
@@ -92,68 +95,71 @@ class NPModel:
                 layer.zero_grad()
 
 
-N_TRAIN = 100
-N_TEST = 1000
-SIGMA_NOISE = 0.1
+def main():
+    N_TRAIN = 100
+    N_TEST = 1000
+    SIGMA_NOISE = 0.1
 
-np.random.seed(0xDEADBEEF)
-x_train = np.random.uniform(low=-np.pi, high=np.pi, size=N_TRAIN)[:, None]
-y_train = np.sin(x_train) + np.random.randn(N_TRAIN, 1) * SIGMA_NOISE
+    np.random.seed(0xDEADBEEF)
+    x_train = np.random.uniform(low=-np.pi, high=np.pi, size=N_TRAIN)[:, None]
+    y_train = np.sin(x_train) + np.random.randn(N_TRAIN, 1) * SIGMA_NOISE
 
-x_test = np.random.uniform(low=-np.pi, high=np.pi, size=N_TEST)[:, None]
-y_test = np.sin(x_test) + np.random.randn(N_TEST, 1) * SIGMA_NOISE
+    x_test = np.random.uniform(low=-np.pi, high=np.pi, size=N_TEST)[:, None]
+    y_test = np.sin(x_test) + np.random.randn(N_TEST, 1) * SIGMA_NOISE
 
-# Initialize the neural network
-model = NPModel([1, 8, 8, 1])
+    # Initialize the neural network
+    model = NPModel([1, 8, 8, 1])
 
-# Training hyperparameters
-epochs = 5000
-initial_lr = 0.2
-lr_decay = 0.999
+    # Training hyperparameters
+    epochs = 5000
+    initial_lr = 0.2
+    lr_decay = 0.999
 
-# Loss function
-mse_loss = NPMSELoss()
+    # Loss function
+    mse_loss = NPMSELoss()
 
-# Training loop
-train_losses = []
-test_losses = []
-lr = initial_lr
-for epoch in range(epochs):
-    # Forward pass
-    preds = model.forward(x_train)
-    loss = mse_loss.forward(preds, y_train)
+    # Training loop
+    train_losses = []
+    test_losses = []
+    lr = initial_lr
+    for epoch in range(epochs):
+        # Forward pass
+        preds = model.forward(x_train)
+        loss = mse_loss.forward(preds, y_train)
 
-    # Backward pass
-    model.zero_grad()
-    grad_loss = mse_loss.backward()
-    model.backward(grad_loss)
+        # Backward pass
+        model.zero_grad()
+        grad_loss = mse_loss.backward()
+        model.backward(grad_loss)
 
-    # Update weights
-    model.gd_update(lr)
+        # Update weights
+        model.gd_update(lr)
 
-    # Decay learning rate
-    lr *= lr_decay
+        # Decay learning rate
+        lr *= lr_decay
 
-    # Record training loss
-    train_losses.append(loss)
+        # Record training loss
+        train_losses.append(loss)
 
-    # Test loss
-    test_preds = model.forward(x_test)
-    test_loss = mse_loss.forward(test_preds, y_test)
-    test_losses.append(test_loss)
+        # Test loss
+        test_preds = model.forward(x_test)
+        test_loss = mse_loss.forward(test_preds, y_test)
+        test_losses.append(test_loss)
 
-    # Plot periodically
-    if epoch % 1000 == 0 or epoch == epochs - 1:
-        print("train loss", loss)
-        print("test loss", test_loss)
-        plt.scatter(x_train, y_train, color="blue")
-        plt.plot(np.sort(x_test, axis=0), model.forward(np.sort(x_test, axis=0)), color="red")
-        plt.title(f"Epoch {epoch}")
-        plt.show()
+        # Plot periodically
+        if epoch % 1000 == 0 or epoch == epochs - 1:
+            plt.scatter(x_train, y_train, color="blue")
+            plt.plot(np.sort(x_test, axis=0), model.forward(np.sort(x_test, axis=0)), color="red")
+            plt.title(f"Epoch {epoch}")
+            plt.show()
 
-# Plot loss
-plt.figure()
-plt.semilogy(range(epochs), train_losses, label="Train Loss")
-plt.semilogy(range(epochs), test_losses, label="Test Loss")
-plt.legend()
-plt.show()
+    # Plot loss
+    plt.figure()
+    plt.semilogy(range(epochs), train_losses, label="Train Loss")
+    plt.semilogy(range(epochs), test_losses, label="Test Loss")
+    plt.legend()
+    plt.show()
+
+
+if __name__ == "__main__":
+    main()
