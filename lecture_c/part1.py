@@ -56,7 +56,7 @@ def train_polynomial_model(model, optimizer, num_steps=100):
 
 
 # Experiment with different learning rates
-learning_rates = [0.0000001, 0.000001, 0.00001]
+learning_rates = [0.0000001, 0.000001, 0.00001, 0.0001]
 loss_histories = {}
 for lr in learning_rates:
     model = PolynomialModel(degree)
@@ -82,6 +82,13 @@ x_values = torch.linspace(0, 2 * torch.pi, 500)
 plt.plot(x_values, torch.sin(x_values), label="Ground Truth (sin(x))")
 plt.scatter(x_train, y_train, color="red", label="Training Data")
 
+
+X = torch.vander(x_values, 4, increasing=True)
+
+hessian = 2 * X.T @ X
+cond = torch.linalg.cond(hessian)
+print("condition value ", cond)
+
 # Plot exact solution from closed-form method
 y_exact = torch.vander(x_values, degree + 1, increasing=True) @ W_closed_form
 plt.plot(x_values, y_exact, label="Exact Solution (Closed-Form)", color="green")
@@ -106,7 +113,7 @@ final_losses = {}
 
 # Iterate over combinations of learning rate and momentum
 learning_rates = 10 ** torch.linspace(-6, 0, 7)
-momentums = torch.linspace(0.1, 10, 20)
+momentums = torch.linspace(0.1, 1, 100)
 for lr in learning_rates:
     for momentum in momentums:
         # Initialize model and optimizer with current lr and momentum
@@ -144,7 +151,7 @@ print(f"Final Loss after 100 steps (SGD momentum): {loss_history_sgd_momentum[-1
 final_losses = defaultdict(float)
 
 # Iterate over learning rates
-for learn_rate in 10 ** torch.linspace(-5, 0, 6):
+for learn_rate in 10 ** torch.linspace(-5, 0, 30):
     model_adam = PolynomialModel(degree)
     initialize_weights(model_adam)
     optimizer_adam = optim.Adam(model_adam.parameters(), lr=learn_rate)
@@ -177,7 +184,7 @@ def closure():
 
 model_lbfgs = PolynomialModel(degree)
 initialize_weights(model_lbfgs)
-optimizer_lbfgs = optim.LBFGS(model_lbfgs.parameters(), lr=1)
+optimizer_lbfgs = optim.LBFGS(model_lbfgs.parameters())
 loss_history_lbfgs = []
 
 for step in range(100):
@@ -185,11 +192,13 @@ for step in range(100):
     loss_history_lbfgs.append(closure().item())
 print(f"Final Loss after 100 steps (LBFGS): {loss_history_lbfgs[-1]:.4f}")
 
+
 # Plot loss against steps for SGD with Momentum, Adam, and LBFGS
 plt.figure(figsize=(12, 6))
 plt.plot(loss_history_sgd_momentum, label="SGD with Momentum")
 plt.plot(loss_history_adam, label="Adam")
 plt.plot(loss_history_lbfgs, label="LBFGS")
+plt.yscale("log")
 plt.xlabel("Training Steps")
 plt.ylabel("Loss")
 plt.title("Loss vs. Training Steps for Different Optimizers")

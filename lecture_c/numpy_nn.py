@@ -108,7 +108,7 @@ def main():
     model = NPModel([1, 8, 8, 1])
 
     # Training hyperparameters
-    epochs = 5000
+    epochs = 1000
     initial_lr = 0.2
     lr_decay = 0.999
 
@@ -143,17 +143,28 @@ def main():
         test_loss = mse_loss.forward(test_preds, y_test)
         test_losses.append(test_loss)
 
+        xx = np.linspace(-np.pi, np.pi, 1000)
+
         # Plot periodically
-        if epoch % 1000 == 0 or epoch == epochs - 1:
-            plt.scatter(x_train, y_train, color="blue")
-            plt.plot(np.sort(x_test, axis=0), model.forward(np.sort(x_test, axis=0)), color="red")
+        if epoch % 200 == 0 or epoch == epochs - 1:
+            plt.plot(xx, np.sin(xx), color="green", label="ground truth sine")
+            plt.scatter(x_train, y_train, color="blue", label="training data")
+            plt.plot(
+                np.sort(x_test, axis=0),
+                model.forward(np.sort(x_test, axis=0)),
+                color="red",
+                label="model",
+            )
             plt.title(f"Epoch {epoch}")
+            plt.legend()
             plt.show()
+    print("final loss", test_loss)
 
     # Plot loss
     plt.figure()
     plt.semilogy(range(epochs), train_losses, label="Train Loss")
     plt.semilogy(range(epochs), test_losses, label="Test Loss")
+    plt.yscale("log")
     plt.legend()
     plt.show()
 
