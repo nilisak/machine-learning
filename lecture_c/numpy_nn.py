@@ -15,15 +15,12 @@ class NPLinear:
 
     def forward(self, x):
         # Compute the forward pass
-        print(np.shape(x @ self.W.T))
-        print(np.shape(self.b))
         self.x = x
         return x @ self.W.T + self.b
 
     def backward(self, grad_output):
         # Compute gradients
         self.W_grad = grad_output.T @ self.x
-        print(np.shape(self.W_grad))
         self.b_grad = np.sum(grad_output, axis=0)
         return grad_output @ self.W
 
