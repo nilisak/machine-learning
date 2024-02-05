@@ -11,8 +11,7 @@ import torch.optim as optim
 from torch.utils.data import DataLoader, Dataset, random_split
 import pandas as pd
 import wandb
-from sklearn.metrics import confusion_matrix
-import numpy as np
+
 
 if "LOG_PATH" in os.environ:
     os.makedirs(os.path.dirname(os.environ["LOG_PATH"]), exist_ok=True)
@@ -133,12 +132,6 @@ def compute_confusion_matrix(model, loader, device, class_names):
             all_preds.extend(preds.cpu().numpy())
             all_true.extend(true.cpu().numpy())
 
-    # Compute the confusion matrix
-    cm = confusion_matrix(all_true, all_preds)
-
-    # Normalize the confusion matrix over targets (rows)
-    cm_normalized = cm.astype("float") / cm.sum(axis=1)[:, np.newaxis]
-
     # Log the confusion matrix
     wandb.log(
         {
@@ -150,8 +143,6 @@ def compute_confusion_matrix(model, loader, device, class_names):
             )
         }
     )
-
-    return cm_normalized
 
 
 def main(args):
@@ -273,7 +264,7 @@ if __name__ == "__main__":
     parser.add_argument("--train-share", type=float, default=0.8)
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--lr", type=float, default=1e-3)
-    parser.add_argument("--epochs", type=int, default=5)
+    parser.add_argument("--epochs", type=int, default=1)
     if "CREATION_TIMESTAMP" in os.environ:
         timestamp = os.environ["CREATION_TIMESTAMP"]
     else:
