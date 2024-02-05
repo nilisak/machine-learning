@@ -4,12 +4,15 @@ import os
 import sys
 import json
 
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, Dataset, random_split
 import pandas as pd
 import wandb
+from sklearn.metrics import confusion_matrix
+import numpy as np
 
 if "LOG_PATH" in os.environ:
     os.makedirs(os.path.dirname(os.environ["LOG_PATH"]), exist_ok=True)
@@ -70,15 +73,15 @@ def save_checkpoint(state, is_best, checkpoint_dir=".", filename="last_checkpoin
         torch.save(state, best_path)
 
 
-def load_best_model(checkpoint_dir="."):
+def load_best_model(checkpoint_dir=".", input_size=1, input_channels=1):
     best_model_path = os.path.join(checkpoint_dir, "best_checkpoint.pth")
     checkpoint = torch.load(best_model_path)
-    model = IncomeNet(input_size, num_classes)  # Assuming you have these variables set
+    model = IncomeNet(input_size, input_channels)
     model.load_state_dict(checkpoint["state_dict"])
     return model
 
 
-def log_predictions(model, loader, device, num_samples=10):
+def log_predictions(model, loader, device, num_samples=100):
     model.eval()
     class_samples = {}  # A dictionary to store samples for each class
     predictions = []  # A list to store predictions
@@ -115,6 +118,42 @@ def log_predictions(model, loader, device, num_samples=10):
     wandb.log({"predictions": wandb_table})
 
 
+def compute_confusion_matrix(model, loader, device, class_names):
+    model.eval()
+    all_preds = []
+    all_true = []
+    with torch.no_grad():
+        for inputs, labels in loader:
+            inputs = inputs.to(device)
+            labels = labels.to(device)
+            outputs = model(inputs)
+            _, preds = torch.max(outputs, 1)
+            _, true = torch.max(labels, 1)  # Assuming labels are one-hot encoded
+
+            all_preds.extend(preds.cpu().numpy())
+            all_true.extend(true.cpu().numpy())
+
+    # Compute the confusion matrix
+    cm = confusion_matrix(all_true, all_preds)
+
+    # Normalize the confusion matrix over targets (rows)
+    cm_normalized = cm.astype("float") / cm.sum(axis=1)[:, np.newaxis]
+
+    # Log the confusion matrix
+    wandb.log(
+        {
+            "confusion_matrix": wandb.plot.confusion_matrix(
+                preds=all_preds,
+                y_true=all_true,
+                class_names=class_names,
+                title="Normalized Confusion Matrix",
+            )
+        }
+    )
+
+    return cm_normalized
+
+
 def main(args):
     wandb.login(key=get_wandb_key())
     wandb.init(project="ms-in-dnns-income-net", config=args, name=args.run_name)
@@ -138,7 +177,9 @@ def main(args):
     else:
         device = "cpu"
 
-    model = IncomeNet(train_dataset[0][0].shape[0], train_dataset[0][1].shape[0])
+    input_size = train_dataset[0][0].shape[0]
+    num_classes = train_dataset[0][1].shape[0]
+    model = IncomeNet(input_size, num_classes)
     model = model.to(device)
 
     criterion = nn.CrossEntropyLoss()
@@ -220,9 +261,11 @@ def main(args):
     wandb.log({"final": {"val_acc": best_acc}})
 
     checkpoint_dir = os.path.dirname(os.environ["LOG_PATH"]) if "LOG_PATH" in os.environ else "."
-    best_model = load_best_model(checkpoint_dir)
+    best_model = load_best_model(checkpoint_dir, input_size, num_classes)
     best_model = best_model.to(device)
-    log_predictions(best_model, val_loader, device, num_samples=10)
+    log_predictions(best_model, val_loader, device, num_samples=100)
+    class_names = ["0", "1"]
+    compute_confusion_matrix(best_model, val_loader, device, class_names)
 
 
 if __name__ == "__main__":
@@ -230,7 +273,7 @@ if __name__ == "__main__":
     parser.add_argument("--train-share", type=float, default=0.8)
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--lr", type=float, default=1e-3)
-    parser.add_argument("--epochs", type=int, default=10)
+    parser.add_argument("--epochs", type=int, default=5)
     if "CREATION_TIMESTAMP" in os.environ:
         timestamp = os.environ["CREATION_TIMESTAMP"]
     else:
