@@ -11,6 +11,8 @@ import torch.optim as optim
 from torch.utils.data import DataLoader, Dataset, random_split
 import pandas as pd
 import wandb
+from sklearn.metrics import confusion_matrix
+import numpy as np
 
 
 if "LOG_PATH" in os.environ:
@@ -127,7 +129,7 @@ def compute_confusion_matrix(model, loader, device, class_names):
             labels = labels.to(device)
             outputs = model(inputs)
             _, preds = torch.max(outputs, 1)
-            _, true = torch.max(labels, 1)  # Assuming labels are one-hot encoded
+            _, true = torch.max(labels, 1)
 
             all_preds.extend(preds.cpu().numpy())
             all_true.extend(true.cpu().numpy())
@@ -143,6 +145,11 @@ def compute_confusion_matrix(model, loader, device, class_names):
             )
         }
     )
+    cm = confusion_matrix(all_true, all_preds)
+
+    # Normalize the confusion matrix over targets (rows)
+    cm_normalized = cm.astype("float") / cm.sum(axis=1)[:, np.newaxis]
+    print(cm_normalized)
 
 
 def main(args):
