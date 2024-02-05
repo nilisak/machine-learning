@@ -70,6 +70,51 @@ def save_checkpoint(state, is_best, checkpoint_dir=".", filename="last_checkpoin
         torch.save(state, best_path)
 
 
+def load_best_model(checkpoint_dir="."):
+    best_model_path = os.path.join(checkpoint_dir, "best_checkpoint.pth")
+    checkpoint = torch.load(best_model_path)
+    model = IncomeNet(input_size, num_classes)  # Assuming you have these variables set
+    model.load_state_dict(checkpoint["state_dict"])
+    return model
+
+
+def log_predictions(model, loader, device, num_samples=10):
+    model.eval()
+    class_samples = {}  # A dictionary to store samples for each class
+    predictions = []  # A list to store predictions
+
+    with torch.no_grad():
+        for inputs, labels in loader:
+            inputs = inputs.to(device)
+            labels = labels.to(device)
+            outputs = model(inputs)
+            _, preds = torch.max(outputs, 1)
+            _, true_labels = torch.max(labels, 1)
+
+            for i in range(inputs.size(0)):
+                label = true_labels[i].item()
+                if label not in class_samples:
+                    class_samples[label] = 0
+                if class_samples[label] < num_samples:
+                    class_samples[label] += 1
+                    predictions.append((inputs[i], true_labels[i], preds[i]))
+
+    # Create a wandb.Table
+    columns = ["Input Features", "True Label", "Predicted Label"]
+    wandb_table = wandb.Table(columns=columns)
+
+    for input_features, true_label, predicted_label in predictions:
+        # Log to wandb
+        wandb_table.add_data(
+            input_features.cpu().numpy(), true_label.item(), predicted_label.item()
+        )
+        # Log to terminal
+        print(f"True Label: {true_label.item()}, Predicted Label: {predicted_label.item()}")
+
+    # Log the table to W&B
+    wandb.log({"predictions": wandb_table})
+
+
 def main(args):
     wandb.login(key=get_wandb_key())
     wandb.init(project="ms-in-dnns-income-net", config=args, name=args.run_name)
@@ -99,7 +144,7 @@ def main(args):
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=args.lr)
 
-    best_val_loss = float("inf")
+    # best_val_loss = float("inf")
     best_acc = 0.0
     for epoch in range(args.epochs):
         model.train()
@@ -173,6 +218,11 @@ def main(args):
     acc = true_pos / len(val_dataset)
     print(f"Accuracy at the end of training: {best_acc:.4f}")
     wandb.log({"final": {"val_acc": best_acc}})
+
+    checkpoint_dir = os.path.dirname(os.environ["LOG_PATH"]) if "LOG_PATH" in os.environ else "."
+    best_model = load_best_model(checkpoint_dir)
+    best_model = best_model.to(device)
+    log_predictions(best_model, val_loader, device, num_samples=10)
 
 
 if __name__ == "__main__":
