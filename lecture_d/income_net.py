@@ -62,8 +62,15 @@ def get_wandb_key():
         return os.environ["WANDB_KEY"]
 
 
-def main(args):
+def save_checkpoint(state, is_best, checkpoint_dir=".", filename="last_checkpoint.pth"):
+    last_path = os.path.join(checkpoint_dir, filename)
+    torch.save(state, last_path)
+    if is_best:
+        best_path = os.path.join(checkpoint_dir, "best_checkpoint.pth")
+        torch.save(state, best_path)
 
+
+def main(args):
     wandb.login(key=get_wandb_key())
     wandb.init(project="ms-in-dnns-income-net", config=args, name=args.run_name)
 
@@ -92,6 +99,8 @@ def main(args):
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=args.lr)
 
+    best_val_loss = float("inf")
+    best_acc = 0.0
     for epoch in range(args.epochs):
         model.train()
         total_loss = 0.0
@@ -110,6 +119,7 @@ def main(args):
 
         model.eval()
         total_loss = 0.0
+        true_pos = 0
         for inputs, labels in val_loader:
             inputs = inputs.to(device)
             labels = labels.to(device)
@@ -118,14 +128,37 @@ def main(args):
                 loss = criterion(outputs, labels)
 
             total_loss += loss.cpu().item()
+            preds = torch.argmax(outputs, dim=-1)
+            true_pos += (preds == torch.argmax(labels, dim=-1)).cpu().sum()
+        acc = true_pos / len(val_dataset)
         val_loss = total_loss / len(val_loader)
         print(
             f"Epoch [{epoch+1}/{args.epochs}]",
             f"Train Loss: {train_loss:.4f}",
             f"Val Loss: {val_loss:.4f}",
+            f"Val Accuracy: {acc:.4f}",
         )
 
-        wandb.log({"loss": {"train": train_loss, "val": val_loss}}, step=epoch + 1)
+        is_best = acc > best_acc
+        if is_best:
+            best_acc = acc
+
+        checkpoint_dir = (
+            os.path.dirname(os.environ["LOG_PATH"]) if "LOG_PATH" in os.environ else "."
+        )
+        save_checkpoint(
+            {
+                "epoch": epoch + 1,
+                "state_dict": model.state_dict(),
+                "optimizer": optimizer.state_dict(),
+                "val_loss": val_loss,
+                "acc": acc,
+            },
+            is_best,
+            checkpoint_dir,
+        )
+
+        wandb.log({"loss": {"train": train_loss, "val": val_loss, "acc": acc}}, step=epoch + 1)
 
     model.eval()
     true_pos = 0
@@ -138,8 +171,8 @@ def main(args):
         preds = torch.argmax(outputs, dim=-1)
         true_pos += (preds == torch.argmax(labels, dim=-1)).cpu().sum()
     acc = true_pos / len(val_dataset)
-    print(f"Accuracy at the end of training: {acc:.4f}")
-    wandb.log({"final": {"val_acc": acc}})
+    print(f"Accuracy at the end of training: {best_acc:.4f}")
+    wandb.log({"final": {"val_acc": best_acc}})
 
 
 if __name__ == "__main__":
