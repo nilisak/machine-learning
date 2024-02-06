@@ -16,7 +16,7 @@ EXP_DESCRIPTION = "Assignments for MS in DNNs lecture"
 WANDB_KEY = json.load(open("wandb_key.json"))
 CREDENTIALS = service_account.Credentials.from_service_account_file("credentials.json")
 CONTAINER = "europe-docker.pkg.dev/vertex-ai/training/pytorch-gpu.1-13.py310:latest"
-N_GPUS = 0
+N_GPUS = 1
 DATETIME_FMT = "%Y-%m-%d_%H%M%S"
 
 aiplatform.init(
@@ -114,7 +114,8 @@ def launch_package_job(args):
             "--formats=gztar",
             "--dist-dir=" + str(PurePath("dist", timestamp)),
         ],
-        cwd=PurePath(args.directory), check=True
+        cwd=PurePath(args.directory),
+        check=True,
     )
 
     dist_dir = Path(args.directory, "dist", timestamp)

@@ -9,12 +9,11 @@ from torch.utils.data import Subset
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import DataLoader, Dataset, random_split
+from torch.utils.data import DataLoader, Dataset
 from torchvision import datasets
 import wandb
 from sklearn.metrics import confusion_matrix
 import numpy as np
-import torch.optim.lr_scheduler as lr_scheduler
 import random
 from itertools import cycle
 from torchvision import transforms
@@ -28,45 +27,64 @@ if "LOG_PATH" in os.environ:
 
 
 class CIFARNet(nn.Module):
-    def __init__(self, num_classes=10):
+    def __init__(self, num_classes=10, batch_norm=False, dropout=False):
         super().__init__()
         self.features = nn.Sequential(
             nn.Conv2d(3, 64, kernel_size=3, padding=1),
+            nn.BatchNorm2d(64) if batch_norm else nn.Identity(),
             nn.ReLU(inplace=True),
             nn.Conv2d(64, 64, kernel_size=3, padding=1),
+            nn.BatchNorm2d(64) if batch_norm else nn.Identity(),
             nn.ReLU(inplace=True),
             nn.MaxPool2d(kernel_size=2, stride=2),
+            nn.Dropout(0.3) if dropout else nn.Identity(),
             nn.Conv2d(64, 128, kernel_size=3, padding=1),
+            nn.BatchNorm2d(128) if batch_norm else nn.Identity(),
             nn.ReLU(inplace=True),
             nn.Conv2d(128, 128, kernel_size=3, padding=1),
+            nn.BatchNorm2d(128) if batch_norm else nn.Identity(),
             nn.ReLU(inplace=True),
             nn.MaxPool2d(kernel_size=2, stride=2),
+            nn.Dropout(0.3) if dropout else nn.Identity(),
             nn.Conv2d(128, 256, kernel_size=3, padding=1),
+            nn.BatchNorm2d(256) if batch_norm else nn.Identity(),
             nn.ReLU(inplace=True),
             nn.Conv2d(256, 256, kernel_size=3, padding=1),
+            nn.BatchNorm2d(256) if batch_norm else nn.Identity(),
             nn.ReLU(inplace=True),
             nn.Conv2d(256, 256, kernel_size=3, padding=1),
+            nn.BatchNorm2d(256) if batch_norm else nn.Identity(),
             nn.ReLU(inplace=True),
             nn.MaxPool2d(kernel_size=2, stride=2),
+            nn.Dropout(0.3) if dropout else nn.Identity(),
             nn.Conv2d(256, 512, kernel_size=3, padding=1),
+            nn.BatchNorm2d(512) if batch_norm else nn.Identity(),
             nn.ReLU(inplace=True),
             nn.Conv2d(512, 512, kernel_size=3, padding=1),
+            nn.BatchNorm2d(512) if batch_norm else nn.Identity(),
             nn.ReLU(inplace=True),
             nn.Conv2d(512, 512, kernel_size=3, padding=1),
+            nn.BatchNorm2d(512) if batch_norm else nn.Identity(),
             nn.ReLU(inplace=True),
             nn.Conv2d(512, 512, kernel_size=3, padding=1),
+            nn.BatchNorm2d(512) if batch_norm else nn.Identity(),
             nn.ReLU(inplace=True),
             nn.Conv2d(512, 512, kernel_size=3, padding=1),
+            nn.BatchNorm2d(512) if batch_norm else nn.Identity(),
             nn.ReLU(inplace=True),
             nn.Conv2d(512, 512, kernel_size=3, padding=1),
+            nn.BatchNorm2d(512) if batch_norm else nn.Identity(),
             nn.ReLU(inplace=True),
             nn.MaxPool2d(kernel_size=2, stride=2),
+            nn.Dropout(0.3) if dropout else nn.Identity(),
         )
         self.classifier = nn.Sequential(
             nn.Linear(512 * 2 * 2, 4096),
             nn.ReLU(inplace=True),
+            nn.Dropout(0.3) if dropout else nn.Identity(),
             nn.Linear(4096, 4096),
             nn.ReLU(inplace=True),
+            nn.Dropout(0.3) if dropout else nn.Identity(),
             nn.Linear(4096, num_classes),
         )
 
@@ -91,10 +109,10 @@ def save_checkpoint(state, is_best, checkpoint_dir=".", filename="best_checkpoin
     torch.save(state, best_path)
 
 
-def load_best_model(checkpoint_dir=".", input_channels=10):
+def load_best_model(batchnorm, dropout, checkpoint_dir=".", input_channels=10):
     best_model_path = os.path.join(checkpoint_dir, "best_checkpoint.pth")
     checkpoint = torch.load(best_model_path)
-    model = CIFARNet(input_channels)
+    model = CIFARNet(batch_norm=batchnorm, dropout=dropout)
     model.load_state_dict(checkpoint["state_dict"])
     return model
 
@@ -217,6 +235,29 @@ def main(args):
     wandb.init(project="ms-in-dnns-cifar-net", config=args, name=args.run_name)
 
     torch.manual_seed(0xDEADBEEF)
+    train_transform = transforms.Compose(
+        [
+            transforms.ToTensor(),  # Convert images to PyTorch tensors
+            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+        ]  # Normalize the tensors
+    )
+    if args.augmented == "Y":
+        train_transform = transforms.Compose(
+            [
+                transforms.RandomHorizontalFlip(),
+                transforms.RandomVerticalFlip(),
+                transforms.RandomRotation(degrees=(-10, 10)),
+                transforms.RandomResizedCrop(size=32, scale=(0.8, 1.0), ratio=(0.8, 1.2)),
+                transforms.ColorJitter(
+                    brightness=(0.8, 1.2),
+                    contrast=(0.8, 1.2),
+                    saturation=(0.8, 1.2),
+                    hue=(0.8, 1.2),
+                ),
+                transforms.ToTensor(),  # Convert images to PyTorch tensors
+                transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+            ]
+        )
 
     transform = transforms.Compose(
         [
@@ -229,17 +270,18 @@ def main(args):
     train_dataset = datasets.CIFAR10(
         root="data",
         train=True,  # Specify to load the training data
-        download=False,  # Assuming the dataset is already downloaded
-        transform=transform,  # Apply the defined transformation
+        download=True,  # Assuming the dataset is already downloaded
+        transform=train_transform,  # Apply the defined transformation
     )
 
     val_dataset = datasets.CIFAR10(
         root="data",
         train=False,  # Specify to load the training data
-        download=False,  # Assuming the dataset is already downloaded
+        download=True,  # Assuming the dataset is already downloaded
         transform=transform,  # Apply the defined transformation
     )
-    if args.small:
+
+    if args.small == "Y":
         # Assuming `dataset` is your loaded dataset
         total_items = len(train_dataset)  # Total number of items in the dataset
         percentage = 0.01  # Percentage of the dataset you want to select
@@ -263,7 +305,13 @@ def main(args):
     else:
         device = "cpu"
 
-    model = CIFARNet()
+    batchnorm = False
+    if args.batchnorm == "Y":
+        batchnorm = True
+    dropout = False
+    if args.dropout == "Y":
+        dropout = True
+    model = CIFARNet(batch_norm=batchnorm, dropout=dropout)
     model = model.to(device)
 
     criterion = nn.CrossEntropyLoss()
@@ -310,7 +358,7 @@ def main(args):
             f"Val Accuracy: {acc:.4f}",
         )
 
-        is_best = acc > best_acc
+        is_best = acc >= best_acc
         if is_best:
             best_acc = acc
             checkpoint_dir = (
@@ -349,7 +397,7 @@ def main(args):
     print(f"Accuracy at the end of training: {best_acc:.4f}")
     wandb.log({"final": {"val_acc": best_acc}})
 
-    best_model = load_best_model(checkpoint_dir)
+    best_model = load_best_model(batchnorm, batchnorm, checkpoint_dir)
     best_model = best_model.to(device)
     log_predictions(
         best_model,
@@ -362,8 +410,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--epochs", type=int, default=50)
-    parser.add_argument("--small", type=bool, default=True)
+    parser.add_argument("--small", type=str, default="Y")
     parser.add_argument("--lr", type=float, default=1e-3)
+    parser.add_argument("--batchnorm", type=str, default="N")
+    parser.add_argument("--dropout", type=str, default="N")
+    parser.add_argument("--augmented", type=str, default="N")
     if "CREATION_TIMESTAMP" in os.environ:
         timestamp = os.environ["CREATION_TIMESTAMP"]
     else:
