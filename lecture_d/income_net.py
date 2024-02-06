@@ -14,7 +14,9 @@ import pandas as pd
 import wandb
 from sklearn.metrics import confusion_matrix
 import numpy as np
-
+import torch.optim.lr_scheduler as lr_scheduler
+import random
+from itertools import cycle
 
 if "LOG_PATH" in os.environ:
     os.makedirs(os.path.dirname(os.environ["LOG_PATH"]), exist_ok=True)
@@ -120,7 +122,7 @@ def log_predictions(model, loader, device, num_samples=100):
     wandb.log({"predictions": wandb_table})
 
 
-def compute_confusion_matrix(model, loader, device, class_names):
+def compute_confusion_matrix(model, loader, device, class_names, epoch):
     model.eval()
     all_preds = []
     all_true = []
@@ -138,7 +140,7 @@ def compute_confusion_matrix(model, loader, device, class_names):
     # Log the confusion matrix
     wandb.log(
         {
-            "confusion_matrix": wandb.plot.confusion_matrix(
+            f"confusion_matrix{epoch+1}": wandb.plot.confusion_matrix(
                 preds=all_preds,
                 y_true=all_true,
                 class_names=class_names,
@@ -153,6 +155,42 @@ def compute_confusion_matrix(model, loader, device, class_names):
     print(cm_normalized)
 
 
+class ResampledDataset(Dataset):
+    def __init__(self, dataset):
+        class_0_samples = [sample for sample in dataset if sample[1][1] == 0]
+        class_1_samples = [sample for sample in dataset if sample[1][1] == 1]
+
+        # Determine minority and majority classes
+        minority_class, majority_class = (
+            (class_1_samples, class_0_samples)
+            if len(class_1_samples) < len(class_0_samples)
+            else (class_0_samples, class_1_samples)
+        )
+
+        # Calculate how many samples we need to replicate from the minority class
+        extra_samples_needed = len(majority_class) - len(minority_class)
+
+        # Shuffle the minority class samples to randomize the order
+        random.shuffle(minority_class)
+
+        # Create an iterator that cycles through the minority class
+        minority_cycle = cycle(minority_class)
+
+        # Use the cycle iterator to replicate the minority samples until we have enough
+        replicated_samples = [next(minority_cycle) for _ in range(extra_samples_needed)]
+
+        # Combine the original majority class with both the original and replicated minority samples
+        self.resampled_data = majority_class + minority_class + replicated_samples
+
+        random.shuffle(self.resampled_data)
+
+    def __len__(self):
+        return len(self.resampled_data)
+
+    def __getitem__(self, idx):
+        return self.resampled_data[idx]
+
+
 def main(args):
     wandb.login(key=get_wandb_key())
     wandb.init(project="ms-in-dnns-income-net", config=args, name=args.run_name)
@@ -165,6 +203,8 @@ def main(args):
         data_file = pl.PurePath("..", "data", "adult_data", "adult.data")
 
     entire_dataset = AdultDataset(str(data_file))
+    if args.resample:
+        entire_dataset = ResampledDataset(entire_dataset)
     train_dataset, val_dataset = random_split(
         entire_dataset, [args.train_share, 1 - args.train_share]
     )
@@ -182,11 +222,14 @@ def main(args):
     model = IncomeNet(input_size, num_classes)
     model = model.to(device)
 
-    criterion = nn.CrossEntropyLoss()
+    criterion = nn.CrossEntropyLoss(
+        weight=torch.tensor([args.weight, 1 - args.weight], dtype=torch.float)
+    )
     optimizer = optim.Adam(model.parameters(), lr=args.lr)
 
     # best_val_loss = float("inf")
     best_acc = 0.0
+    scheduler = lr_scheduler.StepLR(optimizer, step_size=args.step_size, gamma=args.gamma_lr)
     for epoch in range(args.epochs):
         model.train()
         total_loss = 0.0
@@ -245,6 +288,9 @@ def main(args):
         )
 
         wandb.log({"loss": {"train": train_loss, "val": val_loss, "acc": acc}}, step=epoch + 1)
+        if epoch == 9:
+            compute_confusion_matrix(model, val_loader, device, class_names=["0", "1"], epoch=epoch)
+        scheduler.step()
 
     model.eval()
     true_pos = 0
@@ -264,8 +310,7 @@ def main(args):
     best_model = load_best_model(checkpoint_dir, input_size, num_classes)
     best_model = best_model.to(device)
     log_predictions(best_model, val_loader, device, num_samples=100)
-    class_names = ["0", "1"]
-    compute_confusion_matrix(best_model, val_loader, device, class_names)
+    compute_confusion_matrix(best_model, val_loader, device, class_names=["0", "1"], epoch=epoch)
 
 
 if __name__ == "__main__":
@@ -273,7 +318,12 @@ if __name__ == "__main__":
     parser.add_argument("--train-share", type=float, default=0.8)
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--lr", type=float, default=1e-3)
-    parser.add_argument("--epochs", type=int, default=1)
+    parser.add_argument("--epochs", type=int, default=50)
+    parser.add_argument("--gamma-lr", type=float, default=1)
+    parser.add_argument("--step-size", type=int, default=1)
+    parser.add_argument("--weight", type=float, default=0.5)
+    parser.add_argument("--resample", type=bool, default=False)
+
     if "CREATION_TIMESTAMP" in os.environ:
         timestamp = os.environ["CREATION_TIMESTAMP"]
     else:
