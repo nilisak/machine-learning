@@ -106,7 +106,10 @@ def get_wandb_key():
 
 def save_checkpoint(state, is_best, checkpoint_dir=".", filename="best_checkpoint.pth"):
     best_path = os.path.join(checkpoint_dir, "best_checkpoint.pth")
-    torch.save(state, best_path)
+    try:
+        torch.save(state, best_path)
+    except Exception as e:
+        print(f"Failed to save checkpoint: {e}")
 
 
 def load_best_model(batchnorm, dropout, checkpoint_dir=".", input_channels=10):
@@ -230,9 +233,18 @@ class ResampledDataset(Dataset):
         return self.resampled_data[idx]
 
 
+def remove_file_if_exists(file_path):
+    if os.path.exists(file_path):
+        os.remove(file_path)
+        print(f"Removed file: {file_path}")
+
+
 def main(args):
     wandb.login(key=get_wandb_key())
     wandb.init(project="ms-in-dnns-cifar-net", config=args, name=args.run_name)
+
+    checkpoint_dir = os.path.dirname(os.environ["LOG_PATH"]) if "LOG_PATH" in os.environ else "."
+    remove_file_if_exists(os.path.join(checkpoint_dir, "best_checkpoint.pth"))
 
     torch.manual_seed(0xDEADBEEF)
     train_transform = transforms.Compose(
@@ -252,7 +264,7 @@ def main(args):
                     brightness=(0.8, 1.2),
                     contrast=(0.8, 1.2),
                     saturation=(0.8, 1.2),
-                    hue=(0.8, 1.2),
+                    hue=(-0.1, 0.1),
                 ),
                 transforms.ToTensor(),  # Convert images to PyTorch tensors
                 transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
@@ -358,12 +370,10 @@ def main(args):
             f"Val Accuracy: {acc:.4f}",
         )
 
-        is_best = acc >= best_acc
+        is_best = acc > best_acc
         if is_best:
             best_acc = acc
-            checkpoint_dir = (
-                os.path.dirname(os.environ["LOG_PATH"]) if "LOG_PATH" in os.environ else "."
-            )
+
             save_checkpoint(
                 {
                     "epoch": epoch + 1,
