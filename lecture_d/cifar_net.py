@@ -17,7 +17,6 @@ import numpy as np
 import random
 from itertools import cycle
 from torchvision import transforms
-import torch.optim.lr_scheduler as lr_scheduler
 
 
 if "LOG_PATH" in os.environ:
