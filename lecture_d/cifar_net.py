@@ -17,6 +17,7 @@ import numpy as np
 import random
 from itertools import cycle
 from torchvision import transforms
+import torch.optim.lr_scheduler as lr_scheduler
 
 
 if "LOG_PATH" in os.environ:
@@ -331,7 +332,7 @@ def main(args):
 
     # best_val_loss = float("inf")
     best_acc = 0.0
-    # scheduler = lr_scheduler.StepLR(optimizer, step_size=args.step_size, gamma=args.gamma_lr)
+    # scheduler = lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.95)
     for epoch in range(args.epochs):
         model.train()
         total_loss = 0.0
@@ -350,7 +351,7 @@ def main(args):
 
         model.eval()
         total_loss = 0.0
-        true_pos = 0
+        true_pos = 0.0
         for inputs, labels in val_loader:
             inputs = inputs.to(device)
             labels = labels.to(device)
@@ -360,7 +361,16 @@ def main(args):
 
             total_loss += loss.cpu().item()
             preds = torch.argmax(outputs, dim=-1)
-            true_pos += (preds == torch.argmax(labels, dim=-1)).cpu().sum()
+
+            true_pos += (preds == labels).cpu().sum()
+            """
+            print("preds:")
+            print(preds)
+            print("labels:")
+            print(labels)
+            print("number of true pos:")
+            print(true_pos)
+            """
         acc = true_pos / len(val_dataset)
         val_loss = total_loss / len(val_loader)
         print(
@@ -392,20 +402,6 @@ def main(args):
         )
 
         # scheduler.step()
-
-    model.eval()
-    true_pos = 0
-    for inputs, labels in val_loader:
-        inputs = inputs.to(device)
-        labels = labels.to(device)
-        with torch.no_grad():
-            outputs = model(inputs)
-
-        preds = torch.argmax(outputs, dim=-1)
-        true_pos += (preds == torch.argmax(labels, dim=-1)).cpu().sum()
-    acc = true_pos / len(val_dataset)
-    print(f"Accuracy at the end of training: {best_acc:.4f}")
-    wandb.log({"final": {"val_acc": best_acc}})
 
     best_model = load_best_model(batchnorm, batchnorm, checkpoint_dir)
     best_model = best_model.to(device)
