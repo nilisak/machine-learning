@@ -6,11 +6,11 @@ from torch.utils.data import Subset
 
 
 class CIFARDataModule(L.LightningDataModule):
-    def __init__(self, data_root: str = "./data", batch_size: int = 32, small=True):
+    def __init__(self, data_root: str = "./data", batch_size: int = 32, small="Y"):
         super().__init__()
         self.data_dir = data_root
         self.batch_size = batch_size
-        self.small = small
+        self.small = small == "Y"
         self.transform = transforms.Compose(
             [
                 transforms.ToTensor(),

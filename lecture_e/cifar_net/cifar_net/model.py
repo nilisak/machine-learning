@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.optim as optim
 import lightning as L
 import torchmetrics
+import wandb
 
 
 class CIFARNet(nn.Module):
@@ -75,12 +76,15 @@ class CIFARNet(nn.Module):
 
 
 class CIFARNetModule(L.LightningModule):
-    def __init__(self, lr=1e-3, batch_norm=False, dropout=False, num_classes=10):
+    def __init__(self, lr=1e-3, batch_norm="N", dropout="N", num_classes=10):
         super().__init__()
         self.save_hyperparameters()
-        self.model = CIFARNet(num_classes=num_classes, batch_norm=batch_norm, dropout=dropout)
+        self.model = CIFARNet(
+            num_classes=num_classes, batch_norm=batch_norm == "Y", dropout=dropout == "Y"
+        )
         self.criterion = nn.CrossEntropyLoss()
         self.lr = lr
+        self.num_classes = num_classes
         metrics = torchmetrics.MetricCollection(
             {
                 "acc": torchmetrics.Accuracy(num_classes=num_classes, task="multiclass"),
@@ -92,6 +96,8 @@ class CIFARNetModule(L.LightningModule):
                 ),
             }
         )
+        self.confmat = torchmetrics.ConfusionMatrix(num_classes=num_classes, task="multiclass")
+
         self.train_metrics = metrics.clone(prefix="train/")
         self.val_metrics = metrics.clone(prefix="val/")
         self.best_metrics = metrics.clone(prefix="best/")
@@ -132,6 +138,19 @@ class CIFARNetModule(L.LightningModule):
         self.best_metrics.update(preds, labels)
         self.log("best/loss", loss, on_epoch=True, on_step=False)
         self.log_dict(self.best_metrics, on_epoch=True, on_step=False)
+
+        self.confmat.update(preds, labels)
+
+    def on_test_epoch_end(self):
+        conf_matrix = self.confmat.compute()
+        class_names = [str(i) for i in range(self.num_classes)]
+
+        conf_data = conf_matrix.cpu().numpy()
+        data = [[conf_data[i, j] for j in range(len(class_names))] for i in range(len(class_names))]
+
+        wandb.log({"confusion_matrix": wandb.Table(data=data, columns=class_names)})
+
+        self.confmat.reset()
 
     def configure_optimizers(self):
         optimizer = optim.Adam(self.model.parameters(), lr=self.lr)

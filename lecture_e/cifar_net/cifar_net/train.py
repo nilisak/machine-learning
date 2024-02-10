@@ -62,7 +62,7 @@ if __name__ == "__main__":
 
     parser.add_lightning_class_args(CIFARDataModule, "data")
     if "LOG_PATH" in os.environ:
-        parser.set_defaults({"data.data_root": "/gcs/msindnn_staging/adult_data"})
+        parser.set_defaults({"data.data_root": "/gcs/isakbucket/data"})
     else:
         parser.set_defaults({"data.data_root": "../data"})
 
