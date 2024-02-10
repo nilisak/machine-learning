@@ -1,14 +1,14 @@
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
-import pytorch_lightning as pl
+import lightning as L
 import torch
 from torch.utils.data import Subset
 
 
-class CIFARDataModule(pl.LightningDataModule):
-    def __init__(self, data_dir: str = "./data", batch_size: int = 32, small=True):
+class CIFARDataModule(L.LightningDataModule):
+    def __init__(self, data_root: str = "./data", batch_size: int = 32, small=True):
         super().__init__()
-        self.data_dir = data_dir
+        self.data_dir = data_root
         self.batch_size = batch_size
         self.small = small
         self.transform = transforms.Compose(
@@ -25,7 +25,7 @@ class CIFARDataModule(pl.LightningDataModule):
         datasets.CIFAR10(root=self.data_dir, train=True, download=True)
         datasets.CIFAR10(root=self.data_dir, train=False, download=True)
 
-    def setup(self):
+    def setup(self, stage):
 
         # Load and split the dataset
         self.train_dataset = datasets.CIFAR10(

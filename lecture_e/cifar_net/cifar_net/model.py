@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import pytorch_lightning as pl
+import lightning as L
 import torchmetrics
 
 
@@ -74,32 +74,64 @@ class CIFARNet(nn.Module):
         return x
 
 
-class CIFARNetModule(pl.LightningModule):
+class CIFARNetModule(L.LightningModule):
     def __init__(self, lr=1e-3, batch_norm=False, dropout=False, num_classes=10):
         super().__init__()
         self.save_hyperparameters()
         self.model = CIFARNet(num_classes=num_classes, batch_norm=batch_norm, dropout=dropout)
         self.criterion = nn.CrossEntropyLoss()
         self.lr = lr
-        self.accuracy = torchmetrics.Accuracy()
+        metrics = torchmetrics.MetricCollection(
+            {
+                "acc": torchmetrics.Accuracy(num_classes=num_classes, task="multiclass"),
+                "precision": torchmetrics.Precision(
+                    num_classes=num_classes, average="macro", task="multiclass"
+                ),
+                "recall": torchmetrics.Recall(
+                    num_classes=num_classes, average="macro", task="multiclass"
+                ),
+            }
+        )
+        self.train_metrics = metrics.clone(prefix="train/")
+        self.val_metrics = metrics.clone(prefix="val/")
+        self.best_metrics = metrics.clone(prefix="best/")
 
     def forward(self, x):
         return self.model(x)
 
     def training_step(self, batch, batch_idx):
-        x, y = batch
-        y_hat = self(x)
-        loss = self.criterion(y_hat, y)
-        self.log("train_loss", loss)
-        self.log("train_acc", self.accuracy(torch.argmax(y_hat, dim=1), y), prog_bar=True)
+        inputs, labels = batch
+        outputs = self(inputs)
+        loss = self.criterion(outputs, labels)
+        preds = torch.argmax(outputs, dim=1)  # Convert outputs to predicted class indices
+        self.train_metrics.update(preds, labels)  # Correct order: preds first, then labels
+        self.log("train/loss", loss, on_epoch=True, on_step=False)
+        self.log_dict(self.train_metrics, on_epoch=True, on_step=False)
+
         return loss
 
     def validation_step(self, batch, batch_idx):
-        x, y = batch
-        y_hat = self(x)
-        loss = self.criterion(y_hat, y)
-        self.log("val_loss", loss, prog_bar=True)
-        self.log("val_acc", self.accuracy(torch.argmax(y_hat, dim=1), y), prog_bar=True)
+        inputs, labels = batch
+        outputs = self(inputs)
+        loss = self.criterion(outputs, labels)
+        preds = torch.argmax(outputs, dim=-1)
+
+        acc = (preds == labels).sum() / inputs.shape[0]
+        self.val_metrics.update(preds, labels)
+        self.log("val/loss", loss, on_epoch=True, on_step=False)
+        self.log("val/acc_manual", acc, on_epoch=True, on_step=False)
+        self.log_dict(self.val_metrics, on_epoch=True, on_step=False)
+        self.log("step", float(self.current_epoch + 1), on_epoch=True, on_step=False)
+
+    def test_step(self, batch, batch_idx):
+        inputs, labels = batch
+        outputs = self(inputs)
+        loss = self.criterion(outputs, labels)
+        preds = torch.argmax(outputs, dim=-1)
+
+        self.best_metrics.update(preds, labels)
+        self.log("best/loss", loss, on_epoch=True, on_step=False)
+        self.log_dict(self.best_metrics, on_epoch=True, on_step=False)
 
     def configure_optimizers(self):
         optimizer = optim.Adam(self.model.parameters(), lr=self.lr)

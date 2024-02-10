@@ -29,7 +29,7 @@ def main(args):
         wandb_save_dir = "."
     wandb.login(key=get_wandb_key())
     args.trainer.logger = WandbLogger(
-        project="ms-in-dnns-income-net-lightning", name=args.run_name, save_dir=wandb_save_dir
+        project="ms-in-dnns-cifar-net-lightning", name=args.run_name, save_dir=wandb_save_dir
     )
     args.trainer.logger.experiment.config.update(args_to_flat_dict(args))
 
@@ -56,15 +56,15 @@ def main(args):
 if __name__ == "__main__":
     parser = LightningArgumentParser()
     parser.add_lightning_class_args(Trainer, "trainer")
-    parser.set_defaults({"trainer.max_epochs": 2, "trainer.num_sanity_val_steps": 2})
+    parser.set_defaults({"trainer.max_epochs": 10, "trainer.num_sanity_val_steps": 2})
 
     parser.add_lightning_class_args(CIFARNetModule, "model")
 
-    parser.add_lightning_class_args(CIFARNetModule, "data")
+    parser.add_lightning_class_args(CIFARDataModule, "data")
     if "LOG_PATH" in os.environ:
         parser.set_defaults({"data.data_root": "/gcs/msindnn_staging/adult_data"})
     else:
-        parser.set_defaults({"data.data_root": "../../../data/adult_data"})
+        parser.set_defaults({"data.data_root": "../data"})
 
     if "CREATION_TIMESTAMP" in os.environ:
         timestamp = os.environ["CREATION_TIMESTAMP"]
