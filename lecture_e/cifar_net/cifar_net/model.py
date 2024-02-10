@@ -145,10 +145,27 @@ class CIFARNetModule(L.LightningModule):
         conf_matrix = self.confmat.compute()
         class_names = [str(i) for i in range(self.num_classes)]
 
-        conf_data = conf_matrix.cpu().numpy()
-        data = [[conf_data[i, j] for j in range(len(class_names))] for i in range(len(class_names))]
+        # Initialize an empty list to store the data for each cell in the confusion matrix
+        data = []
+        for actual_class in range(len(class_names)):
+            for predicted_class in range(len(class_names)):
+                # For each cell in the confusion matrix, create a row with actual class, predicted class, and count
+                data.append(
+                    [
+                        class_names[actual_class],
+                        class_names[predicted_class],
+                        int(conf_matrix[actual_class, predicted_class]),
+                    ]
+                )
 
-        wandb.log({"confusion_matrix": wandb.Table(data=data, columns=class_names)})
+        # Log the data as a custom table in Wandb
+        wandb.log(
+            {
+                "confusion_matrix_detailed": wandb.Table(
+                    data=data, columns=["Actual", "Predicted", "Count"]
+                )
+            }
+        )
 
         self.confmat.reset()
 
