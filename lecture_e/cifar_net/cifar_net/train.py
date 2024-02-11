@@ -1,6 +1,7 @@
 from datetime import datetime
 import os
 import sys
+import torch
 
 import wandb
 from lightning.pytorch.loggers import WandbLogger
@@ -9,6 +10,7 @@ from lightning.pytorch.cli import LightningArgumentParser
 from lightning.pytorch.callbacks import RichModelSummary, RichProgressBar, ModelCheckpoint
 
 from cifar_net.data import CIFARDataModule
+from cifar_net.model2 import CIFARVGGModule
 from cifar_net.model import CIFARNetModule
 from cifar_net.utils import get_wandb_key, args_to_flat_dict
 
@@ -25,8 +27,13 @@ def main(args):
 
     if "LOG_PATH" in os.environ:
         wandb_save_dir = os.path.dirname(os.environ["LOG_PATH"])
+        cache_dir = "/gcs/isakbucket/"
     else:
+        cache_dir = "."
         wandb_save_dir = "."
+
+    torch.hub.set_dir(cache_dir)
+
     wandb.login(key=get_wandb_key())
     args.trainer.logger = WandbLogger(
         project="ms-in-dnns-cifar-net-lightning", name=args.run_name, save_dir=wandb_save_dir
@@ -34,7 +41,10 @@ def main(args):
     args.trainer.logger.experiment.config.update(args_to_flat_dict(args))
 
     dm = CIFARDataModule(**vars(args.data))
-    model = CIFARNetModule(**vars(args.model))
+    if args.model_c == 1:
+        model = CIFARNetModule(**vars(args.model))
+    else:
+        model = CIFARVGGModule(**vars(args.model2))
 
     args.trainer.callbacks = [
         RichModelSummary(max_depth=2),
@@ -59,6 +69,7 @@ if __name__ == "__main__":
     parser.set_defaults({"trainer.max_epochs": 10, "trainer.num_sanity_val_steps": 2})
 
     parser.add_lightning_class_args(CIFARNetModule, "model")
+    parser.add_lightning_class_args(CIFARVGGModule, "model2")
 
     parser.add_lightning_class_args(CIFARDataModule, "data")
     if "LOG_PATH" in os.environ:
@@ -71,5 +82,6 @@ if __name__ == "__main__":
     else:
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     parser.add_argument("--run-name", type=str, default=timestamp)
+    parser.add_argument("--model_c", type=int, default=1)
     args = parser.parse_args()
     main(args)

@@ -4,84 +4,51 @@ import torch.optim as optim
 import lightning as L
 import torchmetrics
 import wandb
+from torchvision import models
+import os
 
 
-class CIFARNet(nn.Module):
-    def __init__(self, num_classes=10, batch_norm=False, dropout=False):
+class CIFAR10VGG(nn.Module):
+    def __init__(self, num_classes, pretrained):
+
         super().__init__()
-        self.features = nn.Sequential(
-            nn.Conv2d(3, 64, kernel_size=3, padding=1),
-            nn.BatchNorm2d(64) if batch_norm else nn.Identity(),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(64, 64, kernel_size=3, padding=1),
-            nn.BatchNorm2d(64) if batch_norm else nn.Identity(),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(kernel_size=2, stride=2),
-            nn.Dropout(0.3) if dropout else nn.Identity(),
-            nn.Conv2d(64, 128, kernel_size=3, padding=1),
-            nn.BatchNorm2d(128) if batch_norm else nn.Identity(),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(128, 128, kernel_size=3, padding=1),
-            nn.BatchNorm2d(128) if batch_norm else nn.Identity(),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(kernel_size=2, stride=2),
-            nn.Dropout(0.3) if dropout else nn.Identity(),
-            nn.Conv2d(128, 256, kernel_size=3, padding=1),
-            nn.BatchNorm2d(256) if batch_norm else nn.Identity(),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(256, 256, kernel_size=3, padding=1),
-            nn.BatchNorm2d(256) if batch_norm else nn.Identity(),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(256, 256, kernel_size=3, padding=1),
-            nn.BatchNorm2d(256) if batch_norm else nn.Identity(),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(kernel_size=2, stride=2),
-            nn.Dropout(0.3) if dropout else nn.Identity(),
-            nn.Conv2d(256, 512, kernel_size=3, padding=1),
-            nn.BatchNorm2d(512) if batch_norm else nn.Identity(),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(512, 512, kernel_size=3, padding=1),
-            nn.BatchNorm2d(512) if batch_norm else nn.Identity(),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(512, 512, kernel_size=3, padding=1),
-            nn.BatchNorm2d(512) if batch_norm else nn.Identity(),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(512, 512, kernel_size=3, padding=1),
-            nn.BatchNorm2d(512) if batch_norm else nn.Identity(),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(512, 512, kernel_size=3, padding=1),
-            nn.BatchNorm2d(512) if batch_norm else nn.Identity(),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(512, 512, kernel_size=3, padding=1),
-            nn.BatchNorm2d(512) if batch_norm else nn.Identity(),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(kernel_size=2, stride=2),
-            nn.Dropout(0.3) if dropout else nn.Identity(),
-        )
+
+        if "LOG_PATH" in os.environ:
+
+            cache_dir = "/gcs/isakbucket/"
+        else:
+            cache_dir = "."
+
+        torch.hub.set_dir(cache_dir)
+        # Load the pretrained VGG-16 model features
+        original_model = models.vgg16_bn(pretrained=pretrained)
+        self.features = original_model.features
+
+        # Replace avgpool with an identity layer
+        self.avgpool = nn.Identity()
+
+        # Custom classifier for CIFAR-10
         self.classifier = nn.Sequential(
-            nn.Linear(512 * 2 * 2, 4096),
-            nn.ReLU(inplace=True),
-            nn.Dropout(0.3) if dropout else nn.Identity(),
+            nn.Linear(512, 4096),
+            nn.ReLU(True),
             nn.Linear(4096, 4096),
-            nn.ReLU(inplace=True),
-            nn.Dropout(0.3) if dropout else nn.Identity(),
+            nn.ReLU(True),
             nn.Linear(4096, num_classes),
         )
 
     def forward(self, x):
         x = self.features(x)
+        x = self.avgpool(x)
         x = torch.flatten(x, 1)
         x = self.classifier(x)
         return x
 
 
-class CIFARNetModule(L.LightningModule):
-    def __init__(self, lr=1e-3, batch_norm="N", dropout="N", num_classes=10):
+class CIFARVGGModule(L.LightningModule):
+    def __init__(self, lr=1e-3, num_classes=10, pretrained="Y"):
         super().__init__()
         self.save_hyperparameters()
-        self.model = CIFARNet(
-            num_classes=num_classes, batch_norm=batch_norm == "Y", dropout=dropout == "Y"
-        )
+        self.model = CIFAR10VGG(num_classes=num_classes, pretrained=pretrained == "Y")
         self.criterion = nn.CrossEntropyLoss()
         self.lr = lr
         self.num_classes = num_classes

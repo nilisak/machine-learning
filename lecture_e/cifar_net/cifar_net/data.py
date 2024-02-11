@@ -6,11 +6,39 @@ from torch.utils.data import Subset
 
 
 class CIFARDataModule(L.LightningDataModule):
-    def __init__(self, data_root: str = "./data", batch_size: int = 32, small="Y"):
+    def __init__(self, data_root: str = "./data", batch_size: int = 32, small="Y", augmented="Y"):
         super().__init__()
         self.data_dir = data_root
         self.batch_size = batch_size
         self.small = small == "Y"
+        self.augmented = augmented == "Y"
+
+        self.train_transform = transforms.Compose(
+            [
+                transforms.ToTensor(),
+                transforms.Normalize(
+                    (0.5, 0.5, 0.5), (0.5, 0.5, 0.5)
+                ),  # Normalize the dataset using the mean and std of CIFAR10
+            ]
+        )
+        if self.augmented:
+            self.train_transform = transforms.Compose(
+                [
+                    transforms.RandomHorizontalFlip(),
+                    transforms.RandomVerticalFlip(),
+                    transforms.RandomRotation(degrees=(-10, 10)),
+                    transforms.RandomResizedCrop(size=32, scale=(0.8, 1.0), ratio=(0.8, 1.2)),
+                    transforms.ColorJitter(
+                        brightness=(0.8, 1.2),
+                        contrast=(0.8, 1.2),
+                        saturation=(0.8, 1.2),
+                        hue=(-0.1, 0.1),
+                    ),
+                    transforms.ToTensor(),  # Convert images to PyTorch tensors
+                    transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+                ]
+            )
+
         self.transform = transforms.Compose(
             [
                 transforms.ToTensor(),
@@ -29,7 +57,7 @@ class CIFARDataModule(L.LightningDataModule):
 
         # Load and split the dataset
         self.train_dataset = datasets.CIFAR10(
-            root=self.data_dir, train=True, download=True, transform=self.transform
+            root=self.data_dir, train=True, download=True, transform=self.train_transform
         )
         self.val_dataset = datasets.CIFAR10(
             root=self.data_dir, train=False, download=True, transform=self.transform
