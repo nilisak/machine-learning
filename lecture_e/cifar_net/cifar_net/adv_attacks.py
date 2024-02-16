@@ -7,7 +7,7 @@ from cifar_net.data import CIFARDataModule
 from cifar_net.model2 import CIFARVGGModule  # Adjust according to your package structure
 from cifar_net.utils import get_wandb_key  # Adjust according to your package structure
 import os
-import datetime
+from datetime import datetime
 
 
 def adversarial_attack(
@@ -135,7 +135,7 @@ if __name__ == "__main__":
     if "LOG_PATH" in os.environ:
         path = "/gcs/isakbucket/custom-training-python-package/cifar_package/2024-02-11_133127/ms-in-dnns-cifar-net-lightning/j88owbkn/checkpoints/last.ckpt"
     else:
-        path = "./ms-in-dnns-cifar-net-lightning/lelyjxwu/checkpoints/last.ckpt"
+        path = "./ms-in-dnns-cifar-net-lightning/lhtv55ai/checkpoints/last.ckpt"
     parser.add_argument(
         "--ckpt-path",
         type=str,
@@ -146,7 +146,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--prob-threshold",
         type=float,
-        default=0.5,
+        default=0.99,
         help="Stop threshold for target class probability",
     )
 
