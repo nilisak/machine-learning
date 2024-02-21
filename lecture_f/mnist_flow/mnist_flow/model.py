@@ -161,35 +161,39 @@ class SplitFlow(nn.Module):
     def __init__(self, z_dist):
         super().__init__()
         self.z_dist = z_dist
-        # Initialize a stack to store split tensors during the forward pass
-        self.register_buffer("split_tensors", None)
+        # Use a list to store tensors during the forward pass; this will be handled externally
+        self.stored_tensors = []
 
-    def forward(self, z, ldj, reverse=False):
+    def forward(self, z, ldj, reverse=False, stored_tensors=None):
         if not reverse:
             # Split the tensor into two halves
             z, z_split = z.chunk(2, dim=1)
-
-            # Check if split_tensors is None or empty, initialize or append z_split
-            if self.split_tensors is None:
-                self.split_tensors = z_split.unsqueeze(0)  # Add a new dimension for stacking
-            else:
-                self.split_tensors = torch.cat([self.split_tensors, z_split.unsqueeze(0)], dim=0)
+            self.stored_tensors.append(z_split)
 
             # Update the log-determinant of the Jacobian
             ldj += self.z_dist.log_prob(z_split).sum(dim=[1, 2, 3])
         else:
-            # Retrieve the last stored z_split tensor
-            if self.split_tensors is not None and self.split_tensors.size(0) > 0:
-                z_split = self.split_tensors[-1]  # Get the last tensor
-                self.split_tensors = self.split_tensors[:-1]  # Remove the last tensor
+            # Check if we have a stored tensor for the reverse operation
+            if len(self.stored_tensors) > 0:
+                new_batch_size = z.size(0)  # The new batch size after interpolation
+                expanded_stored_tensors = []
 
-                # Concatenate z and z_split along the channel dimension
+                for tensor in self.stored_tensors:
+                    expanded_tensor = tensor.repeat(new_batch_size // tensor.size(0), 1, 1, 1)
+                    expanded_stored_tensors.append(expanded_tensor)
+
+                # Replace the original stored_tensors with the expanded version
+                self.stored_tensors = expanded_stored_tensors
+                # Use the last stored tensor for reverse operation
+                z_split = self.stored_tensors.pop()
+                print("z_split shape: ", z_split.shape)
+                print("z shape: ", z.shape)
                 z = torch.cat([z, z_split], dim=1)
 
                 # Update the log-determinant of the Jacobian in the reverse direction
                 ldj -= self.z_dist.log_prob(z_split).sum(dim=[1, 2, 3])
             else:
-                raise ValueError("No stored tensor for reverse operation in SplitFlow")
+                raise ValueError("No stored tensor available for reverse operation in SplitFlow")
 
         return z, ldj
 
@@ -230,13 +234,13 @@ class MNISTFlow(nn.Module):
                 )
             )
 
+        self.layers = nn.ModuleList(layer_list)
+
     def reset_all_splitflows(self):
         """Resets the stored tensors in all SplitFlow instances within the model."""
         for layer in self.layers:
             if isinstance(layer, SplitFlow):
                 layer.reset_split_tensors()
-
-        self.layers = nn.ModuleList(layer_list)
 
     def build_checkerboard_mask(self, size, config=1.0):
         """Builds a binary checkerboard mask.
@@ -362,6 +366,9 @@ class MNISTFlowModule(L.LightningModule):
         if stage == "pred":
             wandb.log({"best/samples": table})
         return imgs_x
+
+    def reset_all_splitflows(self):
+        self.model.reset_all_splitflows()
 
     def shared_step(self, batch, metric_prefix):
         imgs_x, labels = batch
