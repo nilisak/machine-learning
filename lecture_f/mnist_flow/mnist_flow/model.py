@@ -161,16 +161,41 @@ class SplitFlow(nn.Module):
     def __init__(self, z_dist):
         super().__init__()
         self.z_dist = z_dist
+        # Initialize a stack to store split tensors during the forward pass
+        self.register_buffer("split_tensors", None)
 
     def forward(self, z, ldj, reverse=False):
         if not reverse:
+            # Split the tensor into two halves
             z, z_split = z.chunk(2, dim=1)
+
+            # Check if split_tensors is None or empty, initialize or append z_split
+            if self.split_tensors is None:
+                self.split_tensors = z_split.unsqueeze(0)  # Add a new dimension for stacking
+            else:
+                self.split_tensors = torch.cat([self.split_tensors, z_split.unsqueeze(0)], dim=0)
+
+            # Update the log-determinant of the Jacobian
             ldj += self.z_dist.log_prob(z_split).sum(dim=[1, 2, 3])
         else:
-            z_split = self.z_dist.sample(sample_shape=z.shape).to(z.device)
-            z = torch.cat([z, z_split], dim=1)
-            ldj -= self.z_dist.log_prob(z_split).sum(dim=[1, 2, 3])
+            # Retrieve the last stored z_split tensor
+            if self.split_tensors is not None and self.split_tensors.size(0) > 0:
+                z_split = self.split_tensors[-1]  # Get the last tensor
+                self.split_tensors = self.split_tensors[:-1]  # Remove the last tensor
+
+                # Concatenate z and z_split along the channel dimension
+                z = torch.cat([z, z_split], dim=1)
+
+                # Update the log-determinant of the Jacobian in the reverse direction
+                ldj -= self.z_dist.log_prob(z_split).sum(dim=[1, 2, 3])
+            else:
+                raise ValueError("No stored tensor for reverse operation in SplitFlow")
+
         return z, ldj
+
+    def reset_split_tensors(self):
+        """Clears the stored split tensors to maintain reversibility."""
+        self.split_tensors = None
 
 
 class MNISTFlow(nn.Module):

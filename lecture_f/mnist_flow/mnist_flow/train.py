@@ -12,6 +12,7 @@ from mnist_flow.data import MNISTDataModule
 from mnist_flow.model import MNISTFlowModule
 from mnist_flow.utils import get_wandb_key, args_to_flat_dict
 
+
 if "LOG_PATH" in os.environ:
     os.makedirs(os.path.dirname(os.environ["LOG_PATH"]), exist_ok=True)
     log = open(os.environ["LOG_PATH"], "a")
@@ -36,6 +37,11 @@ def main(args):
     dm = MNISTDataModule(**vars(args.data))
     model = MNISTFlowModule(**vars(args.model))
 
+    if args.ckpt_path and args.ckpt_path != "None":
+        model = MNISTFlowModule.load_from_checkpoint(args.ckpt_path)
+    else:
+        model = MNISTFlowModule(**vars(args.model))
+
     args.trainer.callbacks = [
         RichModelSummary(max_depth=2),
         RichProgressBar(),
@@ -49,8 +55,10 @@ def main(args):
     ]
 
     trainer = Trainer(**vars(args.trainer))
+    if args.ckpt_path:
+        args.trainer.max_epochs = 0
     trainer.fit(model, datamodule=dm)
-    trainer.test(model, datamodule=dm)
+    trainer.test(model, datamodule=dm, ckpt_path=args.ckpt_path if args.ckpt_path else "best")
     trainer.predict(model, datamodule=dm)
     # trainer.test(model, datamodule=dm, ckpt_path="best")
     # trainer.predict(model, datamodule=dm, ckpt_path="best")
@@ -74,6 +82,9 @@ if __name__ == "__main__":
     else:
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     parser.add_argument("--run-name", type=str, default=timestamp)
+    parser.add_argument(
+        "--ckpt-path", type=str, default="None", help="Path to the checkpoint file."
+    )
 
     args = parser.parse_args()
     main(args)
