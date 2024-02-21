@@ -95,6 +95,9 @@ def interpolate_base_space(model, image1, image2, steps=10):
 
     # Decode interpolated latents back to images
     print(interpolated_latents.shape)
+    model.reset_all_splitflows()
+    for latent in interpolated_latents:
+        print(latent.shape)
     interpolated_images = [model(latent, reverse=True)[0] for latent in interpolated_latents]
     interpolated_images = torch.cat(
         interpolated_images, dim=0

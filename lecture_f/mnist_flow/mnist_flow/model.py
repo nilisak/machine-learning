@@ -230,6 +230,12 @@ class MNISTFlow(nn.Module):
                 )
             )
 
+    def reset_all_splitflows(self):
+        """Resets the stored tensors in all SplitFlow instances within the model."""
+        for layer in self.layers:
+            if isinstance(layer, SplitFlow):
+                layer.reset_split_tensors()
+
         self.layers = nn.ModuleList(layer_list)
 
     def build_checkerboard_mask(self, size, config=1.0):
