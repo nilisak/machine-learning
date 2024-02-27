@@ -8,7 +8,7 @@ from lightning.pytorch import Trainer, seed_everything
 from lightning.pytorch.cli import LightningArgumentParser
 from lightning.pytorch.callbacks import RichModelSummary, RichProgressBar, ModelCheckpoint
 
-from mnist_flow.data import MNISTDataModule, KMNISTDataModule
+from mnist_flow.data import MNISTDataModule, KMNISTDataModule, FashionMNISTDataModule
 from mnist_flow.model import MNISTFlowModule
 from mnist_flow.utils import get_wandb_key, args_to_flat_dict
 
@@ -36,6 +36,8 @@ def main(args):
 
     if args.kmnist:
         dm = KMNISTDataModule(**vars(args.data))
+    elif args.fashion:
+        dm = FashionMNISTDataModule(**vars(args.data))
     else:
         dm = MNISTDataModule(**vars(args.data))
 
@@ -94,7 +96,8 @@ if __name__ == "__main__":
     else:
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     parser.add_argument("--run-name", type=str, default=timestamp)
-    parser.add_argument("--kmnist", type=bool, default=False)
+    parser.add_argument("--kmnist", action="store_true", default=False)
+    parser.add_argument("--fashion", action="store_true", default=False)
     parser.add_argument(
         "--ckpt-path", type=str, default="None", help="Path to the checkpoint file."
     )
