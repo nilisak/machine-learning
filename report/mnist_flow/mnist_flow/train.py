@@ -8,7 +8,7 @@ from lightning.pytorch import Trainer, seed_everything
 from lightning.pytorch.cli import LightningArgumentParser
 from lightning.pytorch.callbacks import RichModelSummary, RichProgressBar, ModelCheckpoint
 
-from mnist_flow.data import MNISTDataModule
+from mnist_flow.data import MNISTDataModule, KMNISTDataModule
 from mnist_flow.model import MNISTFlowModule
 from mnist_flow.utils import get_wandb_key, args_to_flat_dict
 
@@ -30,11 +30,15 @@ def main(args):
         wandb_save_dir = "."
     wandb.login(key=get_wandb_key())
     args.trainer.logger = WandbLogger(
-        project="ms-in-dnns-mnist-flow", name=args.run_name, save_dir=wandb_save_dir
+        project="ms-in-dnns-mnist-flow-proj", name=args.run_name, save_dir=wandb_save_dir
     )
     args.trainer.logger.experiment.config.update(args_to_flat_dict(args))
 
-    dm = MNISTDataModule(**vars(args.data))
+    if args.kmnist:
+        dm = KMNISTDataModule(**vars(args.data))
+    else:
+        dm = MNISTDataModule(**vars(args.data))
+
     model = MNISTFlowModule(**vars(args.model))
 
     if args.ckpt_path and args.ckpt_path != "None":
@@ -67,13 +71,21 @@ def main(args):
 if __name__ == "__main__":
     parser = LightningArgumentParser()
     parser.add_lightning_class_args(Trainer, "trainer")
-    parser.set_defaults({"trainer.max_epochs": 2, "trainer.num_sanity_val_steps": 2})
+    parser.set_defaults(
+        {
+            "trainer.max_epochs": 200,
+            "trainer.num_sanity_val_steps": 2,
+            "trainer.gradient_clip_val": 1,
+        }
+    )
 
     parser.add_lightning_class_args(MNISTFlowModule, "model")
 
     parser.add_lightning_class_args(MNISTDataModule, "data")
+    parser.add_lightning_class_args(KMNISTDataModule, "datak")
+
     if "LOG_PATH" in os.environ:
-        parser.set_defaults({"data.data_root": "/gcs/msindnn_staging/mnist_data"})
+        parser.set_defaults({"data.data_root": "/gcs/isakbucket/data"})
     else:
         parser.set_defaults({"data.data_root": "../../../data/mnist"})
 
@@ -82,6 +94,7 @@ if __name__ == "__main__":
     else:
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     parser.add_argument("--run-name", type=str, default=timestamp)
+    parser.add_argument("--kmnist", type=bool, default=False)
     parser.add_argument(
         "--ckpt-path", type=str, default="None", help="Path to the checkpoint file."
     )

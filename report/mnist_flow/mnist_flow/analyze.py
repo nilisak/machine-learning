@@ -1,16 +1,12 @@
 import torch
-import matplotlib.pyplot as plt
-from pytorch_lightning import seed_everything
+
 from mnist_flow.data import MNISTDataModule
 from mnist_flow.model import MNISTFlowModule
-import wandb
-from mnist_flow.utils import get_wandb_key
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 from lightning.pytorch.cli import LightningArgumentParser
 from datetime import datetime
 import os
-from mnist_flow.data import KMNISTDataModule
-import torchvision
-from torchvision.utils import make_grid
+import matplotlib.pyplot as plt
 import numpy as np
 import torch.nn.functional as F
 
@@ -59,44 +55,6 @@ def logit_transform(x, constraint=0.9, reverse=False):
         log_diag_J = F.softplus(logit_x) + F.softplus(-logit_x) - F.softplus(-pre_logit_scale)
 
         return logit_x, torch.sum(log_diag_J, dim=(1, 2, 3))
-
-
-def compute_confusion_matrix(true_labels, predicted_labels):
-    """
-    Computes a confusion matrix using numpy for binary classification.
-
-    Args:
-    true_labels (numpy.ndarray): Ground truth binary labels.
-    predicted_labels (numpy.ndarray): Predicted binary labels.
-
-    Returns:
-    numpy.ndarray: Confusion matrix ([TN, FP], [FN, TP])
-    """
-    # Convert boolean or non-integer arrays to integers
-    true_labels = true_labels.astype(int)
-    predicted_labels = predicted_labels.astype(int)
-
-    K = len(np.unique(true_labels))  # Number of classes
-    result = np.zeros((K, K))
-
-    for i in range(len(true_labels)):
-        result[true_labels[i]][predicted_labels[i]] += 1
-
-    return result
-
-
-def compute_nll(model, dataloader, device="cpu"):
-    model.eval()  # Set the model to evaluation mode
-    model.to(device)  # Ensure the model is on the correct device
-    total_nll = []
-    with torch.no_grad():  # Disable gradient computation
-        for imgs, _ in dataloader:  # Assume the DataLoader yields (images, labels)
-            imgs = imgs.to(device)  # Move images to the correct device
-            input_image, _ = logit_transform(imgs, reverse=False)  # Apply logit transform directly
-            imgs_z, ldj = model(input_image, reverse=False)  # Forward pass through the model
-            nll = model.nll(imgs_z, ldj, mean=False)  # Compute NLL for each sample
-            total_nll.extend(nll.detach().cpu().numpy())  # Accumulate NLL values
-    return np.array(total_nll)  # Return NLL values as a NumPy array
 
 
 def compute_jacobian(inputs, model):
@@ -159,6 +117,73 @@ def compute_svd(jacobian, sample_idx=0):
     return U, S, V
 
 
+def visualize_principal_directions_with_mnist_image_and_average_in_grid(
+    V, original_image, label, image_shape=(28, 28), num_vectors=8
+):
+    """
+    Visualize the original MNIST image, the first few principal directions from the matrix V with colorbars,
+    and the average of all principal directions, arranging 4 subplots per row. Color mapping is made more aggressive.
+
+    Parameters:
+    - V: The matrix containing right singular vectors (n x n), expected to be a PyTorch tensor.
+    - original_image: The original MNIST image to be visualized.
+    - label: The label for the image being visualized.
+    - image_shape: The shape of the images (height, width).
+    - num_vectors: The number of principal directions to visualize.
+    """
+    # Calculate aggressive color mapping range based on the standard deviation of V's elements
+    std_factor = 1  # Adjust this factor to make color mapping more or less aggressive
+    mean_val = V.mean().item()
+    std_val = V.std().item()
+    vmin, vmax = mean_val - (std_factor * std_val), mean_val + (std_factor * std_val)
+
+    # Adjust the layout to have each subplot in its own row
+    total_plots = num_vectors + 2
+    nrows = (total_plots + 3) // 4
+    ncols = 4
+
+    fig, axes = plt.subplots(nrows, ncols, figsize=(ncols * 3, nrows * 3))
+    axes = axes.flatten()
+
+    # Display the original MNIST image
+    ax = axes[0]
+    original_image_np = (
+        original_image.cpu().numpy() if isinstance(original_image, torch.Tensor) else original_image
+    )
+    ax.imshow(original_image_np.reshape(image_shape), cmap="gray")
+    ax.set_title("Original Image")
+    ax.axis("off")
+
+    for i in range(num_vectors):
+        ax = axes[i + 1]
+        principal_direction = V[:, i].cpu().numpy().reshape(image_shape)
+        im = ax.imshow(principal_direction, cmap="coolwarm", vmin=vmin, vmax=vmax)
+        ax.set_title(f"PD {i+1}")
+        ax.axis("off")
+        divider = make_axes_locatable(ax)
+        cax = divider.append_axes("right", size="5%", pad=0.05)
+        plt.colorbar(im, cax=cax)
+
+    # Display the average of all columns in V in the last subplot
+    V_average = V.mean(axis=1)
+    V_average_np = V_average.cpu().numpy() if V.is_cuda else V_average.numpy()
+    ax = axes[num_vectors + 1]
+    ax.imshow(V_average_np.reshape(image_shape), cmap="coolwarm", vmin=vmin, vmax=vmax)
+    ax.set_title("Average PD")
+    ax.axis("off")
+    divider = make_axes_locatable(ax)
+    cax = divider.append_axes("right", size="5%", pad=0.05)
+    plt.colorbar(im, cax=cax)
+
+    # Hide any unused subplots
+    for i in range(total_plots, nrows * ncols):
+        axes[i].axis("off")
+
+    plt.suptitle(f"Number: {label}")
+    plt.tight_layout()
+    plt.show()
+
+
 # Example usage
 # Assuming `jacobian` is your computed Jacobian with shape [10, 8, 1, 28, 28]
 # Compute SVD for the first sample in the batch
@@ -168,16 +193,22 @@ def main(args):
     # seed_everything(42)
 
     # Load the model (adjust path to your checkpoint)
+    desired_label = args.label  # Example: looking for images of the digit '3'
+
+    # Load the model (adjust path to your checkpoint)
     model = MNISTFlowModule.load_from_checkpoint(args.ckpt_path)
 
     # Prepare a data module and load a batch of data
     mnist_data_module = MNISTDataModule(batch_size=1, data_root="path_to_data")
     mnist_data_module.setup(stage="test")
     data_loader = mnist_data_module.test_dataloader()
-    batch = next(iter(data_loader))
-    inputs, _ = batch
 
-    # Compute the logit transformation (if necessary)
+    for batch in data_loader:
+        inputs, labels = batch
+        if labels == desired_label and np.random.randint(1, 11) == 1:
+            break  # Break the loop once we find an image with the desired label
+
+    # Compute the logit transformation
     inputs_logit, _ = logit_transform(inputs, reverse=False)
 
     # Compute the Jacobian matrix for the batch of inputs
@@ -187,6 +218,25 @@ def main(args):
 
     print(f"Jacobian shape: {jacobian.shape}")
     print("Singular values:", S)
+    k = 8  # Example threshold
+
+    # The first k columns of V span the estimated tangent space at the sample
+    tangent_space_basis = V[:, :k]
+
+    # print(f"Estimated Tangent Space Basis for the first sample:\n{tangent_space_basis}")
+
+    singular_values = S.numpy()  # Assuming S is a PyTorch tensor
+    normalized_singular_values = singular_values / np.sum(singular_values)
+
+    # Compute cumulative sum
+    cumulative_sum = np.cumsum(normalized_singular_values)
+
+    # Determine the dimensionality based on a percentage threshold
+    percentage_threshold = 0.99  # or any other value that suits your analysis
+    dimensionality = np.where(cumulative_sum >= percentage_threshold)[0][0] + 1
+
+    print(f"Estimated dimensionality of the data manifold: {dimensionality}")
+    visualize_principal_directions_with_mnist_image_and_average_in_grid(V, inputs, desired_label)
 
 
 if __name__ == "__main__":
@@ -194,7 +244,6 @@ if __name__ == "__main__":
 
     parser.add_lightning_class_args(MNISTFlowModule, "model")
     parser.add_lightning_class_args(MNISTDataModule, "data")
-    parser.add_lightning_class_args(MNISTDataModule, "datak")
 
     # Set default data path based on environment
     default_data_path = (
@@ -205,11 +254,11 @@ if __name__ == "__main__":
     default_data_path_k = (
         "/gcs/msindnn_staging/kmnist_data" if "LOG_PATH" in os.environ else "../../../data/kmnist"
     )
-    parser.set_defaults({"datak.data_root": default_data_path_k})
 
     # Include run-name and ckpt-path arguments
     timestamp = os.environ.get("CREATION_TIMESTAMP", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
     parser.add_argument("--run-name", type=str, default=timestamp)
+    parser.add_argument("--label", type=int, default=0)
     parser.add_argument("--ckpt-path", type=str, required=True, help="Path to the checkpoint file.")
 
     args = parser.parse_args()
