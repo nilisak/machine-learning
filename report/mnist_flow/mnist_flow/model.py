@@ -161,13 +161,21 @@ class SplitFlow(nn.Module):
     def __init__(self, z_dist):
         super().__init__()
         self.z_dist = z_dist
+        self.z_split = None  # Placeholder for storing split-off dimensions
 
     def forward(self, z, ldj, reverse=False):
         if not reverse:
+            # In forward mode, split z and store one half for later
             z, z_split = z.chunk(2, dim=1)
+            self.z_split = z_split  # Store the split-off part
             ldj += self.z_dist.log_prob(z_split).sum(dim=[1, 2, 3])
         else:
-            z_split = self.z_dist.sample(sample_shape=z.shape).to(z.device)
+            # In reverse mode, concatenate stored z_split back to z
+            z_split = (
+                self.z_split
+                if self.z_split is not None
+                else self.z_dist.sample(sample_shape=z.shape).to(z.device)
+            )
             z = torch.cat([z, z_split], dim=1)
             ldj -= self.z_dist.log_prob(z_split).sum(dim=[1, 2, 3])
         return z, ldj
@@ -248,10 +256,31 @@ class MNISTFlow(nn.Module):
         mask = config * (1 - mask) + (1 - config) * mask
         return mask
 
-    def forward(self, imgs, reverse):
+    def forward(self, imgs, reverse=False):
         z, ldj = imgs, torch.zeros(imgs.shape[0], device=imgs.device)
-        for layer in reversed(self.layers) if reverse else self.layers:
-            z, ldj = layer(z, ldj, reverse=reverse)
+        squeeze_layers = SqueezeFlow()
+        if reverse:
+            # Reverse operation: map from latent space back to data space
+            z, ldj = squeeze_layers(z, ldj, reverse=False)
+            z, z_split = z.chunk(2, dim=1)
+            z, ldj = squeeze_layers(z, ldj, reverse=False)
+            for layer in reversed(self.layers):
+                if isinstance(layer, SplitFlow):
+                    # Retrieve stored dimensions from the layer
+                    layer.z_split = z_split
+                z, ldj = layer(z, ldj, reverse=True)
+
+        else:
+            # Forward operation: normal flow processing
+            for layer in self.layers:
+                z, ldj = layer(z, ldj, reverse=False)
+                if isinstance(layer, SplitFlow):
+                    # Retrieve stored dimensions from the layer
+                    stored_dims = layer.z_split
+
+            z, ldj = squeeze_layers(z, ldj, reverse=True)
+            z = torch.cat([z, stored_dims], dim=1)
+            z, ldj = squeeze_layers.forward(z, ldj, reverse=True)
 
         return z, ldj
 
@@ -323,7 +352,7 @@ class MNISTFlowModule(L.LightningModule):
         return nll
 
     def log_samples(self, n_samples, stage="pred"):
-        imgs_z = self.z_dist.sample(sample_shape=(n_samples, 8, 7, 7)).to(self.device)
+        imgs_z = self.z_dist.sample(sample_shape=(n_samples, 1, 28, 28)).to(self.device)
         imgs_x, ldj = self(imgs_z, reverse=True)
         imgs_x, _ = logit_transform(imgs_x, reverse=True)
         if stage == "pred":

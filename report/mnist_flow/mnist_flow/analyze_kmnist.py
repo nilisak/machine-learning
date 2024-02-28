@@ -57,68 +57,86 @@ def logit_transform(x, constraint=0.9, reverse=False):
         return logit_x, torch.sum(log_diag_J, dim=(1, 2, 3))
 
 
-def compute_jacobian(inputs, model):
+def compute_jacobian_base_wrt_latent(mnist_sample, model, epsilon=1e-7):
     """
-    Computes the Jacobian matrix of the model output with respect to the input.
+    Computes the Jacobian of the base space pixels with respect to the latent space pixels.
 
     Args:
-        inputs (torch.Tensor): Input tensor for which the Jacobian is computed.
-        model (torch.nn.Module): Model for which the Jacobian is computed.
+        mnist_sample (torch.Tensor): An MNIST sample for which to compute the Jacobian.
+                                     Shape should be (1, 28, 28) for a single sample.
+        model (torch.nn.Module): Model used for encoding and decoding.
+        epsilon (float): A small value used for numerical approximation of gradients.
 
     Returns:
         torch.Tensor: The Jacobian matrix.
     """
-    # Ensure model is in evaluation mode to disable dropout, batchnorm, etc.
     model.eval()
 
-    # Ensure inputs require gradients
-    inputs.requires_grad_(True)
+    if mnist_sample.dim() == 2:
+        mnist_sample = mnist_sample.unsqueeze(0)  # Add batch dimension
 
-    # Forward pass through the model
-    outputs, _ = model(inputs, reverse=False)
+    # Encode the input sample to latent space
+    latent_repr, _ = model(mnist_sample, reverse=False)
 
-    jacobian = []
-    for i in range(outputs.size(1)):
-        # Zero gradients from previous iterations
-        model.zero_grad()
+    # Prepare for Jacobian computation
+    num_latent_dims = latent_repr.numel()  # Total number of latent dimensions
+    num_base_pixels = (
+        mnist_sample.numel()
+    )  # Assuming the reconstructed image has the same size as the input
+    jacobian = torch.zeros(num_base_pixels, num_latent_dims)
 
-        # Compute gradient of outputs with respect to inputs
-        output = outputs[:, i].sum()
-        output.backward(retain_graph=True)
+    # Iterate over each dimension in the latent space
+    for i in range(num_latent_dims):
+        # Perturb the latent dimension
+        latent_perturbed = latent_repr.clone()
+        latent_perturbed.view(-1)[i] += epsilon
 
-        # Copy the gradients (which represent one row of the Jacobian)
-        jacobian.append(inputs.grad.data.clone())
+        # Reverse transform the perturbed latent representation
+        reconstructed_perturbed, _ = model(latent_perturbed, reverse=True)
 
-        # Zero gradients specifically for inputs to compute next row of Jacobian
-        inputs.grad.data.zero_()
+        # Compute the numerical gradient with respect to the perturbed dimension
+        diff = (reconstructed_perturbed - mnist_sample) / epsilon
+        jacobian[:, i] = diff.view(-1)
 
-    # Stack to form the Jacobian matrix [batch_size, output_dim, input_dim]
-    return torch.stack(jacobian, dim=1)
+    return jacobian
 
 
-def compute_svd(jacobian, sample_idx=0):
-    """
-    Compute the Singular Value Decomposition (SVD) of the Jacobian matrix for a given sample.
+def plot_S(S_numpy):
+    # Plotting
+    plt.figure(figsize=(8, 6))
+    plt.plot(S_numpy, marker="o", linestyle="-", color="b")
+    plt.title("Singular Values")
+    plt.xlabel("Index")
+    plt.ylabel("Singular Value")
+    plt.grid(True)
+    plt.show()
 
-    Args:
-        jacobian (torch.Tensor): The Jacobian matrix with shape [batch_size, output_dim, 1, height, width].
-        sample_idx (int): Index of the sample in the batch for which to compute the SVD.
 
-    Returns:
-        U, S, V: The singular value decomposition of the Jacobian matrix for the specified sample.
-    """
-    # Select the Jacobian for the specified sample
-    # Reshape to 2D matrix [output_dim, height*width]
-    jacobian_sample = jacobian[sample_idx].squeeze().view(jacobian.size(1), -1)
+def variance_threshold(S, threshold):
+    """Compute the number of significant singular values based on variance threshold and plot normalized cumsums."""
+    # Calculate the proportion of variance explained by each singular value
+    proportions = (S**2) / np.sum(S**2)
+    # Calculate the cumulative sum of these proportions
+    cumulative_proportions = np.cumsum(proportions, axis=0)
 
-    # Compute SVD
-    U, S, V = torch.svd(jacobian_sample)
+    # Find the number of singular values needed to meet the variance threshold
+    num_singular_values = np.sum(cumulative_proportions < threshold).item() + 1
 
-    return U, S, V
+    # Plotting
+    plt.figure(figsize=(8, 6))
+    plt.plot(cumulative_proportions, marker="o", linestyle="-", color="b")
+    plt.axhline(y=threshold, color="r", linestyle="--")
+    plt.title("Cumulative Proportions of Explained Variance")
+    plt.xlabel("Index of Singular Value")
+    plt.ylabel("Cumulative Proportion of Variance Explained")
+    plt.grid(True)
+    plt.show()
+
+    return num_singular_values
 
 
 def visualize_principal_directions_with_mnist_image_and_average_in_grid(
-    V, original_image, label, image_shape=(28, 28), num_vectors=8
+    V, original_image, label, image_shape=(28, 28), desired_num_vectors=8
 ):
     """
     Visualize the original MNIST image, the first few principal directions from the matrix V with colorbars,
@@ -129,8 +147,11 @@ def visualize_principal_directions_with_mnist_image_and_average_in_grid(
     - original_image: The original MNIST image to be visualized.
     - label: The label for the image being visualized.
     - image_shape: The shape of the images (height, width).
-    - num_vectors: The number of principal directions to visualize.
+    - desired_num_vectors: The number of principal directions to visualize (adjusted based on V's size).
     """
+    # Adjust num_vectors based on V's size to avoid IndexError
+    num_vectors = min(desired_num_vectors, V.shape[1])
+
     # Calculate aggressive color mapping range based on the standard deviation of V's elements
     std_factor = 1  # Adjust this factor to make color mapping more or less aggressive
     mean_val = V.mean().item()
@@ -138,25 +159,28 @@ def visualize_principal_directions_with_mnist_image_and_average_in_grid(
     vmin, vmax = mean_val - (std_factor * std_val), mean_val + (std_factor * std_val)
 
     # Adjust the layout to have each subplot in its own row
-    total_plots = num_vectors + 2
+    total_plots = num_vectors + 2  # Including the original image and the average
     nrows = (total_plots + 3) // 4
-    ncols = 4
+    ncols = 4 if total_plots > 1 else 1  # Use only 1 column if showing 2 plots
 
     fig, axes = plt.subplots(nrows, ncols, figsize=(ncols * 3, nrows * 3))
-    axes = axes.flatten()
+    if total_plots > 1:
+        axes = axes.flatten()
 
     # Display the original MNIST image
-    ax = axes[0]
+    ax = axes[0] if total_plots > 1 else plt.gca()
     original_image_np = (
-        original_image.cpu().numpy() if isinstance(original_image, torch.Tensor) else original_image
+        original_image.cpu().numpy().reshape(image_shape)
+        if original_image.requires_grad
+        else original_image.reshape(image_shape)
     )
-    ax.imshow(original_image_np.reshape(image_shape), cmap="gray")
+    ax.imshow(original_image_np, cmap="gray")
     ax.set_title("Original Image")
     ax.axis("off")
 
     for i in range(num_vectors):
         ax = axes[i + 1]
-        principal_direction = V[:, i].cpu().numpy().reshape(image_shape)
+        principal_direction = V[:, i].reshape(image_shape)
         im = ax.imshow(principal_direction, cmap="coolwarm", vmin=vmin, vmax=vmax)
         ax.set_title(f"PD {i+1}")
         ax.axis("off")
@@ -164,20 +188,22 @@ def visualize_principal_directions_with_mnist_image_and_average_in_grid(
         cax = divider.append_axes("right", size="5%", pad=0.05)
         plt.colorbar(im, cax=cax)
 
-    # Display the average of all columns in V in the last subplot
-    V_average = V.mean(axis=1)
-    V_average_np = V_average.cpu().numpy() if V.is_cuda else V_average.numpy()
-    ax = axes[num_vectors + 1]
-    ax.imshow(V_average_np.reshape(image_shape), cmap="coolwarm", vmin=vmin, vmax=vmax)
-    ax.set_title("Average PD")
-    ax.axis("off")
-    divider = make_axes_locatable(ax)
-    cax = divider.append_axes("right", size="5%", pad=0.05)
-    plt.colorbar(im, cax=cax)
+    if total_plots > 1:
+        # Display the average of all columns in V in the last subplot
+        V_average = V.mean(axis=1)
+        V_average_np = V_average.reshape(image_shape)
+        ax = axes[num_vectors + 1]
+        ax.imshow(V_average_np, cmap="coolwarm", vmin=vmin, vmax=vmax)
+        ax.set_title("Average PD")
+        ax.axis("off")
+        divider = make_axes_locatable(ax)
+        cax = divider.append_axes("right", size="5%", pad=0.05)
+        plt.colorbar(im, cax=cax)
 
     # Hide any unused subplots
-    for i in range(total_plots, nrows * ncols):
-        axes[i].axis("off")
+    if total_plots > 1:
+        for i in range(total_plots, nrows * ncols):
+            axes[i].axis("off")
 
     plt.suptitle(f"Number: {label}")
     plt.tight_layout()
@@ -212,31 +238,24 @@ def main(args):
     inputs_logit, _ = logit_transform(inputs, reverse=False)
 
     # Compute the Jacobian matrix for the batch of inputs
-    jacobian = compute_jacobian(inputs_logit, model)
+    jacobian = compute_jacobian_base_wrt_latent(inputs_logit, model)
 
-    U, S, V = compute_svd(jacobian, sample_idx=0)
+    U, S, V = torch.svd(jacobian)
+
+    S = S.detach().numpy()
+    V = V.detach().numpy()
 
     print(f"Jacobian shape: {jacobian.shape}")
-    print("Singular values:", S)
-    k = 8  # Example threshold
 
-    # The first k columns of V span the estimated tangent space at the sample
-    tangent_space_basis = V[:, :k]
+    threshold = 0.9  # Example threshold
+    num_significant_singular_values = variance_threshold(S, threshold)
+    print(f"Number of significant singular values: {num_significant_singular_values}")
 
-    # print(f"Estimated Tangent Space Basis for the first sample:\n{tangent_space_basis}")
+    plot_S(S[:50])
 
-    singular_values = S.numpy()  # Assuming S is a PyTorch tensor
-    normalized_singular_values = singular_values / np.sum(singular_values)
-
-    # Compute cumulative sum
-    cumulative_sum = np.cumsum(normalized_singular_values)
-
-    # Determine the dimensionality based on a percentage threshold
-    percentage_threshold = 0.99  # or any other value that suits your analysis
-    dimensionality = np.where(cumulative_sum >= percentage_threshold)[0][0] + 1
-
-    print(f"Estimated dimensionality of the data manifold: {dimensionality}")
-    visualize_principal_directions_with_mnist_image_and_average_in_grid(V, inputs, desired_label)
+    visualize_principal_directions_with_mnist_image_and_average_in_grid(
+        V, inputs, desired_label, desired_num_vectors=8
+    )
 
 
 if __name__ == "__main__":
