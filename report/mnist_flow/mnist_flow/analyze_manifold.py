@@ -231,7 +231,7 @@ def main(args):
     if args.kmnist:
         model = MNISTFlowModule.load_from_checkpoint("../kmnist_flow_weights_trained.ckpt")
         data_module = KMNISTDataModule(batch_size=1, data_root="data")
-    elif args.fashion:
+    elif args.fmnist:
         model = MNISTFlowModule.load_from_checkpoint("../fashion_flow_weights_trained.ckpt")
         data_module = FashionMNISTDataModule(batch_size=1, data_root="data")
     else:
