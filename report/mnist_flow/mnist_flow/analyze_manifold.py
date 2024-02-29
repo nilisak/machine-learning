@@ -206,25 +206,36 @@ def visualize_principal_directions_with_mnist_image_and_average_in_grid(
     plt.show()
 
 
-def plot_singular_values(all_singular_values):
+def plot_singular_values(all_singular_values, num_values_to_plot=300):
     # Calculate the mean and standard deviation of singular values across all images
     mean_singular_values = np.mean(all_singular_values, axis=0)
     std_singular_values = np.std(all_singular_values, axis=0)
-
+    
+    # If we have too many singular values, plot only the first few
+    if len(mean_singular_values) > num_values_to_plot:
+        mean_singular_values = mean_singular_values[:num_values_to_plot]
+        std_singular_values = std_singular_values[:num_values_to_plot]
+    
+    # Set figure size for better clarity
+    plt.figure(figsize=(12, 6))
+    
     # Create error bars for each singular value
-    plt.errorbar(
-        range(len(mean_singular_values)), mean_singular_values, yerr=std_singular_values, fmt="-o"
-    )
-
-    plt.title("Singular Values with Error Bars")
-    plt.xlabel("Singular Value Index")
-    plt.ylabel("Singular Value")
+    plt.errorbar(range(len(mean_singular_values)), mean_singular_values, yerr=std_singular_values, fmt='o', capsize=5)
+    
+    plt.title('Singular Values with Error Bars', fontsize=16)
+    plt.xlabel('Singular Value Index', fontsize=14)
+    plt.ylabel('Singular Value', fontsize=14)
+    plt.xticks(fontsize=12)
+    plt.yticks(fontsize=12)
+    plt.yscale('log')  # Use log scale for y-axis
+    
+    plt.grid(True, which="both", ls="--", linewidth=0.5)
+    plt.tight_layout()  # Adjust layout to not cut off labels
     plt.show()
 
 
 def main(args):
     # seed_everything(42)
-
     # Load the model (adjust path to your checkpoint)
     desired_label = args.label  # Example: looking for images of the digit '3'
 
@@ -280,12 +291,13 @@ def main(args):
 
     # Counter for images found
     images_found = 0
+    total_images = 10
 
     # Iterate through the dataset
     for batch in data_loader:
         inputs, labels = batch
         if labels == args.label:
-            print(f"current iteration: {images_found+1} / 10")
+            print(f"current iteration: {images_found+1}/{total_images}")
             # Compute the logit transformation
             inputs_logit, _ = logit_transform(inputs, reverse=False)
 
@@ -300,7 +312,7 @@ def main(args):
             all_singular_values.append(S)
 
             images_found += 1
-            if images_found >= 10:
+            if images_found >= total_images:
                 break
 
     # Plot the error bar plot with the singular values
