@@ -70,7 +70,8 @@ class GatedConvNet(nn.Module):
         Inputs:
             c_in - Number of input channels
             c_hidden - Number of hidden dimensions to use within the network
-            c_out - Number of output channels. If -1, 2 times the input channels are used (affine coupling)
+            c_out - Number of output channels. If -1, 2 times the input channels are used
+            (affine coupling)
             num_layers - Number of gated ResNet blocks to apply
         """
         super().__init__()

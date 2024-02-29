@@ -141,7 +141,7 @@ def variance_threshold(S, threshold):
 
 
 def visualize_principal_directions_with_mnist_image_and_average_in_grid(
-    V, original_image, label, image_shape=(28, 28), desired_num_vectors=8
+    V, original_image, label, image_shape=(28, 28), desired_num_vectors=15
 ):
     """
     Visualize the original MNIST image, the first few principal directions from the matrix V with
@@ -167,9 +167,9 @@ def visualize_principal_directions_with_mnist_image_and_average_in_grid(
     vmin, vmax = mean_val - (std_factor * std_val), mean_val + (std_factor * std_val)
 
     # Adjust the layout to have each subplot in its own row
-    total_plots = num_vectors + 2  # Including the original image and the average
-    nrows = (total_plots + 3) // 4
-    ncols = 4 if total_plots > 1 else 1  # Use only 1 column if showing 2 plots
+    total_plots = num_vectors + 1  # Including the original image and the average
+    nrows = (total_plots + 2) // 3
+    ncols = 3 if total_plots > 1 else 1  # Use only 1 column if showing 2 plots
 
     fig, axes = plt.subplots(nrows, ncols, figsize=(ncols * 3, nrows * 3))
     if total_plots > 1:
@@ -196,18 +196,6 @@ def visualize_principal_directions_with_mnist_image_and_average_in_grid(
         cax = divider.append_axes("right", size="5%", pad=0.05)
         plt.colorbar(im, cax=cax)
 
-    if total_plots > 1:
-        # Display the average of all columns in V in the last subplot
-        V_average = V.mean(axis=1)
-        V_average_np = V_average.reshape(image_shape)
-        ax = axes[num_vectors + 1]
-        ax.imshow(V_average_np, cmap="coolwarm", vmin=vmin, vmax=vmax)
-        ax.set_title("Average PD")
-        ax.axis("off")
-        divider = make_axes_locatable(ax)
-        cax = divider.append_axes("right", size="5%", pad=0.05)
-        plt.colorbar(im, cax=cax)
-
     # Hide any unused subplots
     if total_plots > 1:
         for i in range(total_plots, nrows * ncols):
@@ -218,9 +206,20 @@ def visualize_principal_directions_with_mnist_image_and_average_in_grid(
     plt.show()
 
 
-# Example usage
-# Assuming `jacobian` is your computed Jacobian with shape [10, 8, 1, 28, 28]
-# Compute SVD for the first sample in the batch
+def plot_singular_values(all_singular_values):
+    # Calculate the mean and standard deviation of singular values across all images
+    mean_singular_values = np.mean(all_singular_values, axis=0)
+    std_singular_values = np.std(all_singular_values, axis=0)
+
+    # Create error bars for each singular value
+    plt.errorbar(
+        range(len(mean_singular_values)), mean_singular_values, yerr=std_singular_values, fmt="-o"
+    )
+
+    plt.title("Singular Values with Error Bars")
+    plt.xlabel("Singular Value Index")
+    plt.ylabel("Singular Value")
+    plt.show()
 
 
 def main(args):
@@ -268,12 +267,43 @@ def main(args):
     num_significant_singular_values = variance_threshold(S, threshold)
     print(f"Number of significant singular values: {num_significant_singular_values}")
 
-    plot_S(S[:50])
+    """
+    plot_S(S)
     plot_S_log(S / np.max(S))
 
     visualize_principal_directions_with_mnist_image_and_average_in_grid(
         U, inputs, desired_label, desired_num_vectors=8
     )
+    """
+    # Variables to store singular values for each image
+    all_singular_values = []
+
+    # Counter for images found
+    images_found = 0
+
+    # Iterate through the dataset
+    for batch in data_loader:
+        inputs, labels = batch
+        if labels == args.label:
+            # Compute the logit transformation
+            inputs_logit, _ = logit_transform(inputs, reverse=False)
+
+            # Compute the Jacobian matrix for the inputs
+            J = compute_jacobian_base_wrt_latent(inputs_logit, model)
+
+            # Singular Value Decomposition
+            _, S, _ = torch.svd(J)
+
+            # Detach and convert to numpy
+            S = S.detach().numpy()
+            all_singular_values.append(S)
+
+            images_found += 1
+            if images_found >= 10:
+                break
+
+    # Plot the error bar plot with the singular values
+    plot_singular_values(all_singular_values)
 
 
 if __name__ == "__main__":
