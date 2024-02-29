@@ -285,6 +285,7 @@ def main(args):
     for batch in data_loader:
         inputs, labels = batch
         if labels == args.label:
+            print(f"current iteration: {images_found+1} / 10")
             # Compute the logit transformation
             inputs_logit, _ = logit_transform(inputs, reverse=False)
 
