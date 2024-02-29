@@ -98,6 +98,7 @@ if __name__ == "__main__":
     parser.add_argument("--run-name", type=str, default=timestamp)
     parser.add_argument("--kmnist", action="store_true", default=False)
     parser.add_argument("--fashion", action="store_true", default=False)
+
     parser.add_argument(
         "--ckpt-path", type=str, default="None", help="Path to the checkpoint file."
     )

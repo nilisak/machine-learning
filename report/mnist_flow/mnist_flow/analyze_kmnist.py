@@ -70,7 +70,17 @@ def compute_jacobian_base_wrt_latent(mnist_sample, model, epsilon=1e-7):
     Returns:
         torch.Tensor: The Jacobian matrix.
     """
-    model.eval()
+
+    def model_forward_for_jacobian(latent_input):
+        # This function should perform the reverse transformation,
+        # given a latent representation, and return the reconstructed image.
+        reconstructed_image, _ = model(latent_input, reverse=True)
+        return reconstructed_image
+
+        # Make sure the latent representation requires gradient
+        latent_repr.requires_grad_(True)
+
+        # Now use torch.autograd.functional.jacobian with the correct arguments
 
     if mnist_sample.dim() == 2:
         mnist_sample = mnist_sample.unsqueeze(0)  # Add batch dimension
@@ -78,27 +88,10 @@ def compute_jacobian_base_wrt_latent(mnist_sample, model, epsilon=1e-7):
     # Encode the input sample to latent space
     latent_repr, _ = model(mnist_sample, reverse=False)
 
-    # Prepare for Jacobian computation
-    num_latent_dims = latent_repr.numel()  # Total number of latent dimensions
-    num_base_pixels = (
-        mnist_sample.numel()
-    )  # Assuming the reconstructed image has the same size as the input
-    jacobian = torch.zeros(num_base_pixels, num_latent_dims)
+    J_analytical = torch.autograd.functional.jacobian(model_forward_for_jacobian, latent_repr)
+    J_analytical = J_analytical.squeeze().reshape(784, 784)
 
-    # Iterate over each dimension in the latent space
-    for i in range(num_latent_dims):
-        # Perturb the latent dimension
-        latent_perturbed = latent_repr.clone()
-        latent_perturbed.view(-1)[i] += epsilon
-
-        # Reverse transform the perturbed latent representation
-        reconstructed_perturbed, _ = model(latent_perturbed, reverse=True)
-
-        # Compute the numerical gradient with respect to the perturbed dimension
-        diff = (reconstructed_perturbed - mnist_sample) / epsilon
-        jacobian[:, i] = diff.view(-1)
-
-    return jacobian
+    return J_analytical
 
 
 def plot_S(S_numpy):
@@ -108,6 +101,19 @@ def plot_S(S_numpy):
     plt.title("Singular Values")
     plt.xlabel("Index")
     plt.ylabel("Singular Value")
+    plt.grid(True)
+    plt.show()
+
+
+def plot_S_log(S_numpy):
+    # Plotting
+    plt.figure(figsize=(8, 6))
+    plt.plot(S_numpy, marker="o", linestyle="-", color="b")
+    plt.title("Singular Values")
+    plt.xlabel("Index")
+    plt.ylabel("Singular Value")
+    plt.yscale("log")
+    plt.xscale("log")
     plt.grid(True)
     plt.show()
 
@@ -238,23 +244,25 @@ def main(args):
     inputs_logit, _ = logit_transform(inputs, reverse=False)
 
     # Compute the Jacobian matrix for the batch of inputs
-    jacobian = compute_jacobian_base_wrt_latent(inputs_logit, model)
+    J = compute_jacobian_base_wrt_latent(inputs_logit, model)
 
-    U, S, V = torch.svd(jacobian)
+    U, S, V = torch.svd(J)
 
     S = S.detach().numpy()
     V = V.detach().numpy()
+    U = U.detach().numpy()
 
-    print(f"Jacobian shape: {jacobian.shape}")
+    print(f"Jacobian analytical shape: {J.shape}")
 
-    threshold = 0.9  # Example threshold
+    threshold = 0.99  # Example threshold
     num_significant_singular_values = variance_threshold(S, threshold)
     print(f"Number of significant singular values: {num_significant_singular_values}")
 
     plot_S(S[:50])
+    plot_S_log(S / np.max(S))
 
     visualize_principal_directions_with_mnist_image_and_average_in_grid(
-        V, inputs, desired_label, desired_num_vectors=8
+        U, inputs, desired_label, desired_num_vectors=8
     )
 
 

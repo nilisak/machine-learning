@@ -1,6 +1,6 @@
 import torch
 
-from mnist_flow.data import MNISTDataModule
+from mnist_flow.data import MNISTDataModule, KMNISTDataModule, FashionMNISTDataModule
 from mnist_flow.model import MNISTFlowModule
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from lightning.pytorch.cli import LightningArgumentParser
@@ -228,12 +228,20 @@ def main(args):
     desired_label = args.label  # Example: looking for images of the digit '3'
 
     # Load the model (adjust path to your checkpoint)
-    model = MNISTFlowModule.load_from_checkpoint(args.ckpt_path)
+    if args.kmnist:
+        model = MNISTFlowModule.load_from_checkpoint("../kmnist_flow_weights_trained.ckpt")
+        data_module = KMNISTDataModule(batch_size=1, data_root="data")
+    elif args.fashion:
+        model = MNISTFlowModule.load_from_checkpoint("../fashion_flow_weights_trained.ckpt")
+        data_module = FashionMNISTDataModule(batch_size=1, data_root="data")
+    else:
+        model = MNISTFlowModule.load_from_checkpoint("../mnist_flow_weights_trained.ckpt")
+        data_module = MNISTDataModule(batch_size=1, data_root="data")
 
     # Prepare a data module and load a batch of data
-    mnist_data_module = MNISTDataModule(batch_size=1, data_root="path_to_data")
-    mnist_data_module.setup(stage="test")
-    data_loader = mnist_data_module.test_dataloader()
+
+    data_module.setup(stage="test")
+    data_loader = data_module.test_dataloader()
 
     for batch in data_loader:
         inputs, labels = batch
@@ -269,24 +277,12 @@ def main(args):
 if __name__ == "__main__":
     parser = LightningArgumentParser()
 
-    parser.add_lightning_class_args(MNISTFlowModule, "model")
-    parser.add_lightning_class_args(MNISTDataModule, "data")
-
-    # Set default data path based on environment
-    default_data_path = (
-        "/gcs/msindnn_staging/mnist_data" if "LOG_PATH" in os.environ else "../../../data/mnist"
-    )
-    parser.set_defaults({"data.data_root": default_data_path})
-
-    default_data_path_k = (
-        "/gcs/msindnn_staging/kmnist_data" if "LOG_PATH" in os.environ else "../../../data/kmnist"
-    )
-
     # Include run-name and ckpt-path arguments
     timestamp = os.environ.get("CREATION_TIMESTAMP", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
     parser.add_argument("--run-name", type=str, default=timestamp)
     parser.add_argument("--label", type=int, default=0)
-    parser.add_argument("--ckpt-path", type=str, required=True, help="Path to the checkpoint file.")
-
+    parser.add_argument("--kmnist", action="store_true", default=False)
+    parser.add_argument("--fashion", action="store_true", default=False)
+    parser.add_argument("--mnist", action="store_true", default=True)
     args = parser.parse_args()
     main(args)

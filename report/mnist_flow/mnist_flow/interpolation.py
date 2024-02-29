@@ -64,7 +64,7 @@ def logit_transform(x, constraint=0.9, reverse=False):
 def select_two_images_from_different_classes(data_loader):
     images, labels = next(iter(data_loader))
     # Index of the first image of two different classes
-    class_0_index = (labels == 2).nonzero(as_tuple=True)[0][0].item()
+    class_0_index = (labels == 0).nonzero(as_tuple=True)[0][0].item()
     class_1_index = (labels == 7).nonzero(as_tuple=True)[0][0].item()
 
     # Extract the images
