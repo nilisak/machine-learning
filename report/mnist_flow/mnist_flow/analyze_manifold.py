@@ -119,7 +119,6 @@ def plot_S_log(S_numpy):
 
 
 def variance_threshold(S, threshold):
-    """Compute the number of significant singular values based on variance threshold and plot normalized cumsums."""
     # Calculate the proportion of variance explained by each singular value
     proportions = (S**2) / np.sum(S**2)
     # Calculate the cumulative sum of these proportions
@@ -145,15 +144,18 @@ def visualize_principal_directions_with_mnist_image_and_average_in_grid(
     V, original_image, label, image_shape=(28, 28), desired_num_vectors=8
 ):
     """
-    Visualize the original MNIST image, the first few principal directions from the matrix V with colorbars,
-    and the average of all principal directions, arranging 4 subplots per row. Color mapping is made more aggressive.
+    Visualize the original MNIST image, the first few principal directions from the matrix V with
+    colorbars,
+    and the average of all principal directions, arranging 4 subplots per row. Color mapping is
+    made more aggressive.
 
     Parameters:
     - V: The matrix containing right singular vectors (n x n), expected to be a PyTorch tensor.
     - original_image: The original MNIST image to be visualized.
     - label: The label for the image being visualized.
     - image_shape: The shape of the images (height, width).
-    - desired_num_vectors: The number of principal directions to visualize (adjusted based on V's size).
+    - desired_num_vectors: The number of principal directions to visualize (adjusted based on V's
+    size).
     """
     # Adjust num_vectors based on V's size to avoid IndexError
     num_vectors = min(desired_num_vectors, V.shape[1])
