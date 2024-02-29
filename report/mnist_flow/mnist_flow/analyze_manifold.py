@@ -282,7 +282,7 @@ if __name__ == "__main__":
     parser.add_argument("--run-name", type=str, default=timestamp)
     parser.add_argument("--label", type=int, default=0)
     parser.add_argument("--kmnist", action="store_true", default=False)
-    parser.add_argument("--fashion", action="store_true", default=False)
+    parser.add_argument("--fmnist", action="store_true", default=False)
     parser.add_argument("--mnist", action="store_true", default=True)
     args = parser.parse_args()
     main(args)
