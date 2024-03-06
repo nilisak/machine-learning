@@ -303,7 +303,7 @@ def main(args):
         model = MNISTFlowModule.load_from_checkpoint("../fashion_flow_weights_trained.ckpt")
         data_module = FashionMNISTDataModule(batch_size=1, data_root="data")
     else:
-        model = MNISTFlowModule.load_from_checkpoint("../mnist_flow_weights_trained.ckpt")
+        model = MNISTFlowModule.load_from_checkpoint("../mnist_flow_adj_weights_trained.ckpt")
         data_module = MNISTDataModule(batch_size=1, data_root="data")
 
     # Prepare a data module and load a batch of data
@@ -386,24 +386,25 @@ def main(args):
         plot_singular_values_by_label(all_singular_values)
 
     if args.loop_all:
+        """
         model_k = MNISTFlowModule.load_from_checkpoint("../kmnist_flow_weights_trained.ckpt")
         data_module_k = KMNISTDataModule(batch_size=1, data_root="data")
 
         model_f = MNISTFlowModule.load_from_checkpoint("../fashion_flow_weights_trained.ckpt")
         data_module_f = FashionMNISTDataModule(batch_size=1, data_root="data")
-
-        model_m = MNISTFlowModule.load_from_checkpoint("../mnist_flow_weights_trained.ckpt")
+        """
+        model_m = MNISTFlowModule.load_from_checkpoint("../mnist_flow_adj_weights_trained.ckpt")
         data_module_m = MNISTDataModule(batch_size=1, data_root="data")
 
-        models = [model_m, model_k, model_f]
-        data_modules = [data_module_m, data_module_k, data_module_f]
+        models = [model_m]
+        data_modules = [data_module_m]
         filenames = [
             "singular_values/mnist_arrays.npy",
             "singular_values/kmnist_arrays.npy",
             "singular_values/fmnist_arrays.npy",
         ]
 
-        for j in range(3):
+        for j in range(1):
             print(f"dataset {j+1}/{3}")
             model = models[j]
             data_module = data_modules[j]

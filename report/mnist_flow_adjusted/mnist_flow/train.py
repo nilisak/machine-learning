@@ -9,7 +9,7 @@ from lightning.pytorch.cli import LightningArgumentParser
 from lightning.pytorch.callbacks import RichModelSummary, RichProgressBar, ModelCheckpoint
 
 from mnist_flow.data import MNISTDataModule, KMNISTDataModule, FashionMNISTDataModule
-from mnist_flow.model_org import MNISTFlowModule
+from mnist_flow.model import MNISTFlowModule
 from mnist_flow.utils import get_wandb_key, args_to_flat_dict
 
 
@@ -62,8 +62,7 @@ def main(args):
 
     trainer = Trainer(**vars(args.trainer))
     if args.ckpt_path:
-        args.trainer.max_epochs = 0
-    trainer.fit(model, datamodule=dm)
+        trainer.fit(model, datamodule=dm, ckpt_path=args.ckpt_path)
     trainer.test(model, datamodule=dm, ckpt_path=args.ckpt_path if args.ckpt_path else "best")
     trainer.predict(model, datamodule=dm)
     # trainer.test(model, datamodule=dm, ckpt_path="best")
